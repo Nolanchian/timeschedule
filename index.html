@@ -151,7 +151,9 @@ dialog.set::backdrop{background:rgba(20,20,18,.28)}
 .axis-box{flex:1;height:42px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1.5px var(--primary);color:var(--primary);font-size:15px;letter-spacing:.06em}
 .xh{display:flex;align-items:center;height:42px;font-size:15px;color:#555;white-space:nowrap}
 .xh.c{justify-content:center}
-.lab{min-width:0;cursor:pointer}
+.lab{min-width:0;cursor:grab;user-select:none;-webkit-user-select:none}
+.lab-box[contenteditable]{user-select:text;-webkit-user-select:text;cursor:text}
+.lab.dragging-src{opacity:.35}
 .lab-box{height:100%;background:var(--pc);color:var(--pt);display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:15px;padding:0 10px;overflow:hidden;white-space:nowrap}
 .lab.sec .lab-box{background:none;color:#333;justify-content:flex-start;padding:0 2px;border-bottom:2px solid #333;font-size:16px}
 .xc{display:flex;align-items:center;font-size:15px;white-space:nowrap;overflow:hidden;min-width:0}
@@ -180,6 +182,22 @@ dialog.set::backdrop{background:rgba(20,20,18,.28)}
 .empty{padding:48px;color:#999;text-align:center;border:1px dashed var(--line)}
 .tip{position:fixed;z-index:50;background:var(--ink);color:#fff;font-size:12px;padding:4px 8px;border-radius:6px;pointer-events:none;white-space:nowrap;display:none}
 
+/* 拖曳排序與右鍵選單 */
+.dropline{position:fixed;height:2px;background:var(--ink);border-radius:1px;z-index:60;pointer-events:none;display:none}
+.dropline::before{content:"";position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--ink)}
+body.reordering,body.reordering *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}
+.titem.dragging-src{opacity:.35}
+.ctx{position:fixed;top:0;left:0;right:auto;min-width:210px;max-height:calc(100vh - 16px);overflow:auto}
+.ctx .ch{padding:6px 10px 4px;font-size:12px;color:var(--muted);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctx .ch.t{color:var(--text);font-weight:700;font-size:13px}
+.ctx hr{border:0;border-top:1px solid var(--subtle);margin:4px 0}
+.ctx .sw{width:12px;height:12px;border-radius:3px;background:var(--c);flex:none}
+.ctx .ck{margin-left:auto;padding-left:12px;font-size:12px}
+.ctx .glyph{margin:0 1px}
+.ctx button.danger:hover{color:#c0392b;background:#fbeceb}
+.pop button:disabled{opacity:.35;pointer-events:none}
+.side-hint{padding:14px 8px 0;font-size:12px;color:var(--faint);line-height:1.7}
+
 @media (max-width:860px){
   .app{grid-template-columns:1fr;grid-template-rows:auto auto 1fr;height:auto}
   .top{flex-wrap:wrap;padding:8px 12px;gap:8px}
@@ -191,7 +209,7 @@ dialog.set::backdrop{background:rgba(20,20,18,.28)}
 @media print{
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   html,body{height:auto;background:#fff}
-  .top,.side,.tip,dialog{display:none!important}
+  .top,.side,.tip,dialog,.ctx,.dropline{display:none!important}
   .app{display:block;height:auto}
   .main{overflow:visible}
   .stage{padding:0}
@@ -209,6 +227,8 @@ dialog.set::backdrop{background:rgba(20,20,18,.28)}
 </div>
 <dialog class="set" id="set"></dialog>
 <input type="file" id="file" accept=".json,application/json" hidden>
+<div class="pop ctx" id="ctx" hidden></div>
+<div class="dropline" id="dropline"></div>
 <div class="tip" id="tip"></div>
 
 <script>
@@ -453,7 +473,7 @@ function renderChart() {
     S.rows.forEach((r, i) => {
       const gr = `grid-row:${i + 1}`, pc = rowColor(r);
       const pv = `--pc:${pc};--pt:${inkOn(pc)}`;
-      h += `<div class="lab${r.type === 'section' ? ' sec' : ''}" style="grid-column:1;${gr};${pv}" data-open="${r.id}"><div class="lab-box" ${ce} data-edit="rowname" data-row="${r.id}">${esc(r.name)}</div></div>`;
+      h += `<div class="lab${r.type === 'section' ? ' sec' : ''}" style="grid-column:1;${gr};${pv}" data-open="${r.id}"><div class="lab-box" data-edit="rowname" data-row="${r.id}" title="拖曳排序・雙擊改名・右鍵改顏色與類型">${esc(r.name)}</div></div>`;
       S.columns.forEach((c, j) => {
         const pos = `grid-column:${j + 3};${gr};${pv}`;
         if (r.type === 'section') { h += `<div style="${pos}"></div>`; return; }
@@ -564,6 +584,7 @@ function renderSide() {
       <button class="btn sm" data-act="addPoint">${ic('plus')}舉辦日</button>
       <button class="btn sm" data-act="addSection">${ic('plus')}分組</button>
     </div>
+    <div class="side-hint">按住拖曳可排序・右鍵改顏色與類型<br>圖上標籤雙擊可改名</div>
   </section>`;
   const sc = side.scrollTop;
   side.innerHTML = h;
@@ -677,6 +698,11 @@ function defaultProject() {
   const last = [...state.rows].reverse().find(r => r.type !== 'section');
   return last ? last.project : state.projects[0].id;
 }
+function newProject() {
+  const used = new Set(state.projects.map(p => p.color));
+  const color = PALETTE.find(c => !used.has(c)) || PALETTE[state.projects.length % PALETTE.length];
+  const p = { id: uid(), name: '新專案', color }; state.projects.push(p); return p;
+}
 function newRow(type, name) {
   const s = type === 'section' ? toDay(state.start) : nextStart();
   return { id: uid(), name, type, project: defaultProject(), start: toStr(s), end: toStr(type === 'bar' ? s + 6 : s), fields: Object.fromEntries(state.columns.map(c => [c.id, c.type === 'status' ? 0 : ''])) };
@@ -684,6 +710,7 @@ function newRow(type, name) {
 document.addEventListener('click', e => {
   // 關閉下拉選單
   $$('details.menu[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
+  if (!ctx.hidden) closeCtx();
   const b = e.target.closest('[data-act]');
   if (!b || chart.contains(b)) return;
   const S = state, id = b.dataset.id, act = b.dataset.act;
@@ -702,11 +729,9 @@ document.addEventListener('click', e => {
       if (r.type !== 'bar') r.end = r.start;
       break;
     }
-    case 'addProj': {
-      const used = new Set(S.projects.map(p => p.color));
-      const color = PALETTE.find(c => !used.has(c)) || PALETTE[S.projects.length % PALETTE.length];
-      const p = { id: uid(), name: '新專案', color }; S.projects.push(p); focusName = `[data-k="proj:${p.id}:name"]`; break;
-    }
+    case 'addProj': { const p = newProject(); focusName = `[data-k="proj:${p.id}:name"]`; break; }
+    case 'setProj': S.rows[ri].project = b.dataset.v; break;
+    case 'newProjFor': { const p = newProject(); S.rows[ri].project = p.id; focusName = `[data-k="proj:${p.id}:name"]`; break; }
     case 'projDel': {
       if (S.projects.length < 2) return;
       const pi = S.projects.findIndex(p => p.id === id), p = S.projects[pi];
@@ -752,6 +777,7 @@ function openTask(id) {
   const li = $(`[data-card="${id}"]`, side); if (li) li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 chart.addEventListener('keydown', e => {
+  if (e.isComposing || e.keyCode === 229) return; // 注音／拼音選字中的 Enter 不算完成
   if (e.target.isContentEditable && (e.key === 'Enter' || e.key === 'Escape')) { e.preventDefault(); e.target.blur(); }
 });
 chart.addEventListener('paste', e => {
@@ -771,7 +797,14 @@ chart.addEventListener('focusout', e => {
   else if (kind === 'field') { const r = findRow(t.dataset.row); if (r) r.fields[t.dataset.col] = v; key = `row:${t.dataset.row}:f:${t.dataset.col}`; }
   if (key) $$(`[data-k="${key}"]`).forEach(x => x.value = v);
   checkpoint();
+  if (kind === 'rowname') t.removeAttribute('contenteditable');
   if (kind === 'colname' && openRow) renderSide();
+});
+chart.addEventListener('dblclick', e => {
+  const box = e.target.closest('.lab-box'); if (!box || box.isContentEditable) return;
+  box.setAttribute('contenteditable', 'plaintext-only'); box.spellcheck = false; box.focus();
+  const rg = document.createRange(); rg.selectNodeContents(box);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rg);
 });
 chart.addEventListener('click', e => {
   const st = e.target.closest('[data-act="status"]');
@@ -836,6 +869,85 @@ function endDrag() {
 }
 chart.addEventListener('pointerup', endDrag);
 chart.addEventListener('pointercancel', endDrag);
+
+/* ================= 拖曳排序（圖上標籤、側欄任務） ================= */
+const dropline = $('#dropline');
+let reo = null, suppressClick = false;
+document.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  const lab = e.target.closest('#chart .lab'), trow = e.target.closest('#side .trow');
+  if (lab && !e.target.isContentEditable) reo = { id: lab.dataset.open, src: 'chart', el: lab, y0: e.clientY, active: false };
+  else if (trow) reo = { id: trow.dataset.id, src: 'side', el: trow.parentElement, y0: e.clientY, active: false };
+});
+document.addEventListener('pointermove', e => {
+  if (!reo) return;
+  if (!reo.active) {
+    if (Math.abs(e.clientY - reo.y0) < 5) return;
+    reo.active = true; closeCtx();
+    document.body.classList.add('reordering'); reo.el.classList.add('dragging-src');
+    getSelection().removeAllRanges();
+  }
+  e.preventDefault();
+  const chartSrc = reo.src === 'chart';
+  const els = chartSrc ? $$('.lab', chart) : $$('.titem', side);
+  let idx = els.length;
+  for (let i = 0; i < els.length; i++) { const r = els[i].getBoundingClientRect(); if (e.clientY < r.top + r.height / 2) { idx = i; break; } }
+  reo.to = idx;
+  const g = chartSrc ? state.rowGap / 2 : 2;
+  const y = idx < els.length ? els[idx].getBoundingClientRect().top - g : els[els.length - 1].getBoundingClientRect().bottom + g;
+  const box = chartSrc ? els[0].getBoundingClientRect() : $('.tlist', side).getBoundingClientRect();
+  const right = chartSrc ? ($('.tl', chart)?.getBoundingClientRect().right ?? box.right) : box.right;
+  dropline.style.cssText = `display:block;top:${y - 1}px;left:${box.left}px;width:${right - box.left}px`;
+  // 側欄靠近上下緣時自動捲動
+  if (!chartSrc) { const sr = side.getBoundingClientRect(); if (e.clientY < sr.top + 40) side.scrollTop -= 8; else if (e.clientY > sr.bottom - 40) side.scrollTop += 8; }
+});
+function endReorder(commit) {
+  if (!reo) return;
+  const r = reo; reo = null;
+  if (!r.active) return;
+  document.body.classList.remove('reordering'); dropline.style.display = 'none'; r.el.classList.remove('dragging-src');
+  suppressClick = true; setTimeout(() => { suppressClick = false; }, 0);
+  if (!commit) return;
+  const from = state.rows.findIndex(x => x.id === r.id);
+  let to = r.to ?? from; if (to > from) to--;
+  if (from < 0 || to === from) return;
+  const [row] = state.rows.splice(from, 1); state.rows.splice(to, 0, row);
+  checkpoint(); renderAll();
+}
+document.addEventListener('pointerup', () => endReorder(true));
+document.addEventListener('pointercancel', () => endReorder(false));
+document.addEventListener('click', e => { if (suppressClick) { e.stopPropagation(); e.preventDefault(); suppressClick = false; } }, true);
+
+/* ================= 右鍵選單 ================= */
+const ctx = $('#ctx');
+function closeCtx() { ctx.hidden = true; }
+function openCtx(id, x, y) {
+  const S = state, r = findRow(id); if (!r) return;
+  const i = S.rows.indexOf(r), ck = on => on ? '<span class="ck">✓</span>' : '';
+  let h = `<div class="ch t">${esc(r.name) || '（未命名）'}</div>`;
+  if (r.type !== 'section') {
+    h += `<div class="ch">顏色（專案）</div>` + S.projects.map(p => `<button data-act="setProj" data-id="${r.id}" data-v="${p.id}"><span class="sw" style="--c:${p.color}"></span>${esc(p.name) || '（未命名）'}${ck(r.project === p.id)}</button>`).join('')
+      + `<button data-act="newProjFor" data-id="${r.id}">${ic('plus')}新顏色（新專案）</button><hr>`;
+  }
+  h += `<div class="ch">類型</div>` + Object.entries(TYPES).map(([k, l]) => `<button data-act="setType" data-id="${r.id}" data-v="${k}"><span class="glyph ${k}" style="--c:${k === 'section' ? 'var(--faint)' : rowColor(r)}"></span>${l}${ck(r.type === k)}</button>`).join('');
+  h += `<hr><button data-act="rowUp" data-id="${r.id}" ${i ? '' : 'disabled'}>${ic('up')}上移</button>
+    <button data-act="rowDown" data-id="${r.id}" ${i < S.rows.length - 1 ? '' : 'disabled'}>${ic('down')}下移</button>
+    <button data-act="rowDup" data-id="${r.id}">${ic('copy')}複製</button>
+    <button class="danger" data-act="rowDel" data-id="${r.id}">${ic('trash')}刪除</button>`;
+  ctx.innerHTML = h; ctx.hidden = false;
+  ctx.style.left = Math.max(8, Math.min(x, innerWidth - ctx.offsetWidth - 8)) + 'px';
+  ctx.style.top = Math.max(8, Math.min(y, innerHeight - ctx.offsetHeight - 8)) + 'px';
+}
+document.addEventListener('contextmenu', e => {
+  const t = e.target.closest('#chart .lab, #chart .it, #side .titem');
+  if (!t || (e.target.isContentEditable)) { closeCtx(); return; }
+  const id = t.dataset.open || t.dataset.row || t.dataset.card; if (!id) return;
+  e.preventDefault(); hideTip(); openCtx(id, e.clientX, e.clientY);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtx(); });
+window.addEventListener('resize', closeCtx);
+document.addEventListener('scroll', e => { if (!ctx.contains(e.target)) closeCtx(); }, true);
+window.addEventListener('blur', closeCtx);
 
 /* ================= 檔案與列印 ================= */
 const fileInput = $('#file');
