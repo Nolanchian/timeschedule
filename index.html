@@ -316,7 +316,7 @@ function defaultState() {
     labelWidth: 230, rowHeight: 36, rowGap: 12,
     theme: { primary: '#5b9e9b', head: '#f2f2f0' },
     showToday: true, printToday: true, dateMarks: 'none', gridLines: 'group', shadeWeekend: true, barText: false,
-    paperSize: 'A4', orient: 'auto', fillPage: true,
+    paperSize: 'A4', orient: 'auto', fillPage: true, exportFormat: 'pdf',
     projects: [{ id: p1, name: '活動執行', color: '#1c1c1a' }, { id: p2, name: '行政財務', color: '#5b9e9b' }],
     columns: [{ id: c1, name: '負責人', type: 'text', width: 130 }, { id: c2, name: '狀態', type: 'status', width: 70 }],
     rows: [
@@ -354,6 +354,8 @@ function normalize(s) {
   if (!PAPER[o.paperSize]) o.paperSize = 'A4';
   if (!['auto', 'landscape', 'portrait'].includes(o.orient)) o.orient = 'auto';
   delete o.paper; delete o.fitPage;
+  if (!['pdf', 'jpg'].includes(o.exportFormat)) o.exportFormat = 'pdf';
+  delete o.jpgLayout;
   if (!['none', 'start', 'range'].includes(o.dateMarks)) o.dateMarks = 'none';
   delete o.labelColor;
   return o;
@@ -572,7 +574,7 @@ function renderTop() {
       <button data-tb="open">${ic('open')}開啟 JSON…</button>
       <button data-tb="save">${ic('save')}儲存 JSON</button>
     </div></details>
-    <button class="btn primary" data-tb="pdf">${ic('print')}匯出 PDF</button>`;
+    <button class="btn primary" data-tb="pdf">${ic('print')}匯出</button>`;
   updateUndoBtns();
 }
 
@@ -679,15 +681,19 @@ function renderSettings() {
 const exp = $('#exp');
 function renderExport() {
   const S = state;
-  exp.innerHTML = `<div class="set-h"><h2>匯出 PDF</h2><button class="btn ib" data-tb="closeExp" title="關閉">${ic('x')}</button></div>
+  const pdf = S.exportFormat === 'pdf', usePage = pdf;
+  const seg = (act, cur, items) => `<div class="seg">${Object.entries(items).map(([v, l]) => `<button data-act="${act}" data-v="${v}" class="${cur === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  exp.innerHTML = `<div class="set-h"><h2>匯出</h2><button class="btn ib" data-tb="closeExp" title="關閉">${ic('x')}</button></div>
   <div class="set-b">
-    ${pagePreview()}
+    ${frow('格式', seg('setFormat', S.exportFormat, { pdf: 'PDF', jpg: 'JPG' }))}
+    ${pdf ? '' : '<div class="exp-note" style="text-align:left;margin:0 0 4px">依圖表原本大小輸出，解析度為畫面的 3 倍</div>'}
+    ${usePage ? `${pagePreview()}
     ${frow('紙張', `<div class="seg">${['A4', 'A3'].map(v => `<button data-act="setPaper" data-v="${v}" class="${S.paperSize === v ? 'on' : ''}">${v}</button>`).join('')}</div>`)}
     ${frow('方向', `<div class="seg">${Object.entries({ auto: '自動', landscape: '橫向', portrait: '直向' }).map(([v, l]) => `<button data-act="setOrient" data-v="${v}" class="${S.orient === v ? 'on' : ''}">${l}</button>`).join('')}</div>`, '自動：選能把圖放得最大的方向')}
-    ${frow('延展填滿頁面', sw('fillPage', S.fillPage), '自動加大列距或欄寬，讓圖表貼滿紙張')}
+    ${frow('加寬時間格填滿', sw('fillPage', S.fillPage), '圖表比紙張瘦長時，加寬時間格補滿左右空白')}` : ''}
     ${frow('圖上標示日期', `<select class="in" data-k="dateMarks">${opt({ none: '不標示', start: '起始日', range: '起訖日' }, S.dateMarks)}</select>`, '在橫條起點或圖示旁加上日期')}
     ${frow('顯示今天線', S.showToday ? sw('printToday', S.printToday) : '<span class="off">已在設定中關閉</span>')}
-    <div class="exp-act"><button class="btn" data-tb="doPrint" title="用瀏覽器列印視窗另存 PDF（文字可選取）">改用列印視窗</button><span style="flex:1"></span><button class="btn" data-tb="closeExp">取消</button><button class="btn primary" data-tb="doPdf">${ic('print')}下載 PDF</button></div>
+    <div class="exp-act">${pdf ? '<button class="btn" data-tb="doPrint" title="用瀏覽器列印視窗另存 PDF（文字可選取）">改用列印視窗</button>' : ''}<span style="flex:1"></span><button class="btn" data-tb="closeExp">取消</button><button class="btn primary" data-tb="doExport">${ic('print')}下載 ${pdf ? 'PDF' : 'JPG'}</button></div>
 
   </div>`;
 }
@@ -702,19 +708,13 @@ function pageLayout(w, h) {
   const k = fit(pw, ph);
   return { o, pw, ph, k, dw: w * k, dh: h * k };
 }
-// 「延展填滿」：圖太扁就加大列高與列距，太高就加寬時間格，讓比例貼近紙張
+// 「延展填滿」：列高與列距固定和畫面一致；只有圖比紙張瘦長時，加寬時間格貼近紙張比例
 function planStretch(w, h) {
-  const S = state, n = S.rows.length, N = COLS.length;
+  const S = state, N = COLS.length;
   const p = { rh: S.rowHeight, gap: S.rowGap, cw: S.colWidth[S.unit], w, h };
   if (!S.fillPage) return p;
   const L = pageLayout(w, h), A = (L.pw - 2 * MARGIN) / (L.ph - 2 * MARGIN);
-  if (w / h > A && n) {
-    const D = w / A - h;
-    p.rh = Math.min(Math.max(S.rowHeight, 56), S.rowHeight + D / n * 0.5);
-    let rest = D - n * (p.rh - S.rowHeight);
-    if (n > 1) p.gap = Math.min(S.rowGap + rest / (n - 1), Math.max(S.rowGap, p.rh * 1.5));
-    p.h = h + n * (p.rh - S.rowHeight) + (n - 1) * (p.gap - S.rowGap);
-  } else if (w / h < A && N) {
+  if (w / h < A && N) {
     p.cw = Math.min(S.colWidth[S.unit] * 2.5, S.colWidth[S.unit] + (h * A - w) / N);
     p.w = w + N * (p.cw - S.colWidth[S.unit]);
   }
@@ -831,6 +831,7 @@ document.addEventListener('click', e => {
     case 'setProj': S.rows[ri].project = b.dataset.v; break;
     case 'setPaper': S.paperSize = b.dataset.v; break;
     case 'setOrient': S.orient = b.dataset.v; break;
+    case 'setFormat': S.exportFormat = b.dataset.v; break;
     case 'newProjFor': { const p = newProject(); S.rows[ri].project = p.id; focusName = `[data-k="proj:${p.id}:name"]`; break; }
     case 'projDel': {
       if (S.projects.length < 2) return;
@@ -1074,7 +1075,7 @@ document.addEventListener('click', e => {
     case 'pdf': renderExport(); exp.showModal(); break;
     case 'closeExp': exp.close(); break;
     case 'doPrint': exp.close(); checkpoint(); setTimeout(() => window.print(), 60); break;
-    case 'doPdf': exportPDF(b); break;
+    case 'doExport': exportFile(b); break;
     case 'undo': undo(); break;
     case 'redo': redo(); break;
     case 'settings': renderSettings(); dlg.showModal(); break;
@@ -1127,30 +1128,45 @@ async function fontCSS(text) {
   }
   return css;
 }
-async function exportPDF(btn) {
+async function exportFile(btn) {
+  const S = state, pdf = S.exportFormat === 'pdf', usePage = pdf;
+  const fname = (S.title || '時程表').replace(/[\\/:*?"<>|]/g, '_');
   const label = btn.innerHTML;
   btn.disabled = true; btn.textContent = '產生中…';
   if (document.activeElement?.isContentEditable) document.activeElement.blur();
   hideTip(); closeCtx(); checkpoint();
-  const hideToday = !state.printToday;
-  chart.classList.add('exporting'); chart.classList.toggle('no-today', hideToday);
-  const restore = applyStretch();
+  chart.classList.add('exporting'); chart.classList.toggle('no-today', !S.printToday);
+  const restore = usePage ? applyStretch() : () => {};
   try {
-    await Promise.all([loadScript(LIBS.h2i), loadScript(LIBS.pdf)]);
+    await Promise.all([loadScript(LIBS.h2i), pdf ? loadScript(LIBS.pdf) : null]);
     const w = chart.scrollWidth, h = chart.scrollHeight;
-    const L = pageLayout(w, h);
-    // 約 300dpi，並避免超過瀏覽器畫布上限
-    const pr = Math.max(1, Math.min(4, (L.dw / 25.4 * 300) / w, 15000 / w, 15000 / h));
+    const L = usePage ? pageLayout(w, h) : null;
+    // 紙張版面約 300dpi；只有圖表時為畫面 3 倍；都不超過瀏覽器畫布上限
+    const pr = Math.max(1, Math.min(usePage ? 4 : 3, usePage ? (L.dw / 25.4 * 300) / w : 3, 15000 / w, 15000 / h));
     let fontEmbedCSS;
     try { fontEmbedCSS = await fontCSS(chart.innerText); } catch { fontEmbedCSS = undefined; }
-    const png = await window.htmlToImage.toPng(chart, { pixelRatio: pr, backgroundColor: '#ffffff', width: w, height: h, fontEmbedCSS, skipFonts: !fontEmbedCSS });
-    const doc = new window.jspdf.jsPDF({ orientation: L.o, unit: 'mm', format: state.paperSize.toLowerCase(), compress: true });
-    doc.setProperties({ title: state.title || '時程表' });
-    doc.addImage(png, 'PNG', (L.pw - L.dw) / 2, (L.ph - L.dh) / 2, L.dw, L.dh, undefined, 'FAST');
-    doc.save(`${(state.title || '時程表').replace(/[\\/:*?"<>|]/g, '_')}.pdf`);
+    const img = await window.htmlToImage.toCanvas(chart, { pixelRatio: pr, backgroundColor: '#ffffff', width: w, height: h, fontEmbedCSS, skipFonts: !fontEmbedCSS });
+    if (pdf) {
+      const doc = new window.jspdf.jsPDF({ orientation: L.o, unit: 'mm', format: S.paperSize.toLowerCase(), compress: true });
+      doc.setProperties({ title: S.title || '時程表' });
+      doc.addImage(img.toDataURL('image/png'), 'PNG', (L.pw - L.dw) / 2, (L.ph - L.dh) / 2, L.dw, L.dh, undefined, 'FAST');
+      doc.save(`${fname}.pdf`);
+    } else {
+      const out = document.createElement('canvas'), g = out.getContext('2d');
+      const m = Math.round(40 * pr); // 圖表原尺寸，四周加白邊
+      out.width = img.width + 2 * m; out.height = img.height + 2 * m;
+      g.fillStyle = '#fff'; g.fillRect(0, 0, out.width, out.height);
+      g.drawImage(img, m, m);
+      const blob = await new Promise(ok => out.toBlob(ok, 'image/jpeg', 0.95));
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = `${fname}.jpg`;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    }
     exp.close();
   } catch (err) {
-    if (confirm(`PDF 產生失敗：${err.message}\n\n要改用瀏覽器列印視窗嗎？`)) { exp.close(); setTimeout(() => window.print(), 60); }
+    if (pdf && confirm(`PDF 產生失敗：${err.message}\n\n要改用瀏覽器列印視窗嗎？`)) { exp.close(); setTimeout(() => window.print(), 60); }
+    else if (!pdf) alert(`JPG 產生失敗：${err.message}`);
   } finally {
     restore();
     chart.classList.remove('exporting', 'no-today');
