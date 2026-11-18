@@ -198,6 +198,18 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none!imp
 .pop button:disabled{opacity:.35;pointer-events:none}
 .side-hint{padding:14px 8px 0;font-size:12px;color:var(--faint);line-height:1.7}
 
+/* 圖上日期標示 */
+.dm{position:absolute;z-index:3;font-size:12px;color:#666;white-space:nowrap;transform:translateY(-50%);pointer-events:none;font-variant-numeric:tabular-nums;line-height:1}
+.dm.l{transform:translate(-100%,-50%);padding-right:6px}
+.dm.r{padding-left:6px}
+.dm.in{color:var(--ct);padding-left:6px}
+@media print{.hide-today-print .today{display:none}}
+/* 匯出視窗 */
+dialog.set.exp{width:min(440px,calc(100vw - 32px))}
+.exp-act{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.exp-note{font-size:12px;color:var(--muted);margin-top:10px;text-align:right}
+.fr .off{font-size:12px;color:var(--faint)}
+
 @media (max-width:860px){
   .app{grid-template-columns:1fr;grid-template-rows:auto auto 1fr;height:auto}
   .top{flex-wrap:wrap;padding:8px 12px;gap:8px}
@@ -226,6 +238,7 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none!imp
   <main class="main"><div class="stage"><div class="chart-wrap"><div class="chart" id="chart"></div></div></div></main>
 </div>
 <dialog class="set" id="set"></dialog>
+<dialog class="set exp" id="exp"></dialog>
 <input type="file" id="file" accept=".json,application/json" hidden>
 <div class="pop ctx" id="ctx" hidden></div>
 <div class="dropline" id="dropline"></div>
@@ -289,7 +302,7 @@ function defaultState() {
     colWidth: { day: 30, week: 104, month: 120 },
     labelWidth: 230, rowHeight: 36, rowGap: 12,
     theme: { primary: '#5b9e9b', head: '#f2f2f0' },
-    showToday: true, gridLines: 'group', shadeWeekend: true, barText: false,
+    showToday: true, printToday: true, dateMarks: 'none', gridLines: 'group', shadeWeekend: true, barText: false,
     paper: 'A4L', fitPage: true,
     projects: [{ id: p1, name: '活動執行', color: '#1c1c1a' }, { id: p2, name: '行政財務', color: '#5b9e9b' }],
     columns: [{ id: c1, name: '負責人', type: 'text', width: 130 }, { id: c2, name: '狀態', type: 'status', width: 70 }],
@@ -325,6 +338,7 @@ function normalize(s) {
   if (!isDate(o.start)) o.start = d.start;
   if (!isDate(o.end)) o.end = d.end;
   if (!PAPERS[o.paper]) o.paper = 'A4L';
+  if (!['none', 'start', 'range'].includes(o.dateMarks)) o.dateMarks = 'none';
   delete o.labelColor;
   return o;
 }
@@ -501,6 +515,19 @@ function renderChart() {
       } else {
         tl += `<div class="it pt ${r.type}" data-row="${r.id}" data-tip="${tip}" style="--c:${color};left:${fracOf(a, 'mid') * W}px;top:${cy}px"></div>`;
       }
+      if (S.dateMarks !== 'none') {
+        if (r.type === 'bar') {
+          const x1 = fracOf(a, 'start') * W, x2 = fracOf(b, 'end') * W;
+          // 起點太靠左邊界時，日期改放進橫條內
+          tl += x1 >= 44 ? `<span class="dm l" style="left:${x1}px;top:${cy}px">${md(a)}</span>`
+            : `<span class="dm in" style="left:${x1}px;top:${cy}px;--ct:${inkOn(color)}">${md(a)}</span>`;
+          if (S.dateMarks === 'range' && b !== a) tl += `<span class="dm r" style="left:${x2}px;top:${cy}px">${md(b)}</span>`;
+        } else {
+          const x = fracOf(a, 'mid') * W;
+          tl += x >= 50 ? `<span class="dm l" style="left:${x - 14}px;top:${cy}px">${md(a)}</span>`
+            : `<span class="dm r" style="left:${x + 14}px;top:${cy}px">${md(a)}</span>`;
+        }
+      }
     });
     if (S.showToday && N) {
       const t = todayDay();
@@ -509,6 +536,7 @@ function renderChart() {
     h += `<div class="tl" style="grid-column:2;grid-row:1/${n + 1};width:${W}px">${tl}</div></div>`;
   }
   chart.innerHTML = h;
+  chart.classList.toggle('hide-today-print', !S.printToday);
   $('#page-style').textContent = `@page{size:${PAPERS[S.paper].css};margin:10mm}`;
 }
 
@@ -618,6 +646,7 @@ function renderSettings() {
     ${frow('時間軸主色', `<input type="color" data-k="theme.primary" value="${S.theme.primary}">`, '表頭線框、週次文字')}
     ${frow('月份列底色', `<input type="color" data-k="theme.head" value="${S.theme.head}">`)}
     ${frow('格線', `<select class="in" data-k="gridLines">${opt({ group: '只畫月份分隔', all: '每格都畫', none: '不畫' }, S.gridLines)}</select>`)}
+    ${frow('圖上標示日期', `<select class="in" data-k="dateMarks">${opt({ none: '不標示', start: '起始日', range: '起訖日' }, S.dateMarks)}</select>`)}
     ${frow('顯示標題', sw('showTitle', S.showTitle))}
     ${frow('顯示專案圖例', sw('showLegend', S.showLegend))}
     ${frow('標示今天', sw('showToday', S.showToday))}
@@ -630,9 +659,19 @@ function renderSettings() {
       <span style="display:flex"><button class="btn ib sm" data-act="colUp" data-id="${c.id}" ${i ? '' : 'disabled'} title="上移">${ic('up')}</button><button class="btn ib sm danger" data-act="colDel" data-id="${c.id}" title="刪除">${ic('trash')}</button></span>
     </div>`).join('')}
     <div style="padding-top:6px"><button class="btn sm" data-act="addCol">${ic('plus')}新增欄位</button></div>
-    <h4>匯出 PDF</h4>
+  </div>`;
+}
+const exp = $('#exp');
+function renderExport() {
+  const S = state;
+  exp.innerHTML = `<div class="set-h"><h2>匯出 PDF</h2><button class="btn ib" data-tb="closeExp" title="關閉">${ic('x')}</button></div>
+  <div class="set-b">
     ${frow('紙張', `<select class="in" data-k="paper">${opt(Object.fromEntries(Object.entries(PAPERS).map(([k, v]) => [k, v.label])), S.paper)}</select>`)}
     ${frow('自動縮成單頁', sw('fitPage', S.fitPage))}
+    ${frow('圖上標示日期', `<select class="in" data-k="dateMarks">${opt({ none: '不標示', start: '起始日', range: '起訖日' }, S.dateMarks)}</select>`, '在橫條起點或圖示旁加上日期')}
+    ${frow('顯示今天線', S.showToday ? sw('printToday', S.printToday) : '<span class="off">已在設定中關閉</span>')}
+    <div class="exp-act"><button class="btn" data-tb="closeExp">取消</button><button class="btn primary" data-tb="doPrint">${ic('print')}匯出 PDF</button></div>
+    <div class="exp-note">下一步會開啟列印視窗，目的地選「另存為 PDF」</div>
   </div>`;
 }
 
@@ -971,7 +1010,9 @@ document.addEventListener('click', e => {
     }
     case 'open': fileInput.click(); break;
     case 'save': checkpoint(); download(`${(state.title || '時程表').replace(/[\\/:*?"<>|]/g, '_')}.json`, JSON.stringify(state, null, 2)); break;
-    case 'pdf': checkpoint(); window.print(); break;
+    case 'pdf': renderExport(); exp.showModal(); break;
+    case 'closeExp': exp.close(); break;
+    case 'doPrint': exp.close(); checkpoint(); setTimeout(() => window.print(), 60); break;
     case 'undo': undo(); break;
     case 'redo': redo(); break;
     case 'settings': renderSettings(); dlg.showModal(); break;
@@ -979,6 +1020,7 @@ document.addEventListener('click', e => {
   }
 });
 dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+exp.addEventListener('click', e => { if (e.target === exp) exp.close(); });
 fileInput.addEventListener('change', async () => {
   const f = fileInput.files[0]; if (!f) return;
   try {
