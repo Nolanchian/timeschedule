@@ -1,0 +1,771 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>時程表產生器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style id="page-style">@page{size:A4 landscape;margin:10mm}</style>
+<style>
+:root{
+  --ui-bg:#f7f7f5;--ui-panel:#fff;--ui-border:#e2e2dd;--ui-text:#222;--ui-muted:#7a7a75;--ui-accent:#5b9e9b;
+  --canvas:#ecece8;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:"Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;color:var(--ui-text);background:var(--canvas);font-size:14px}
+button,input,select{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:380px 1fr;height:100vh}
+
+/* ---------- 側邊編輯器 ---------- */
+.side{background:var(--ui-bg);border-right:1px solid var(--ui-border);overflow:auto}
+.brand{padding:16px 16px 10px;font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px}
+.brand small{font-weight:400;color:var(--ui-muted);font-size:12px}
+details.sec{border-top:1px solid var(--ui-border)}
+details.sec>summary{cursor:pointer;padding:12px 16px;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details.sec>summary::after{content:"＋";color:var(--ui-muted);font-weight:400}
+details.sec[open]>summary::after{content:"－"}
+details.sec>summary::-webkit-details-marker{display:none}
+.sec-body{padding:0 16px 16px;display:grid;gap:10px}
+.fld{display:grid;gap:4px}
+.fld>span{font-size:12px;color:var(--ui-muted)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+input[type=text],input[type=number],input[type=date],select{width:100%;height:32px;padding:0 8px;border:1px solid var(--ui-border);border-radius:6px;background:#fff;min-width:0}
+input[type=color]{width:100%;height:32px;padding:2px;border:1px solid var(--ui-border);border-radius:6px;background:#fff;cursor:pointer}
+input:focus,select:focus{outline:2px solid color-mix(in srgb,var(--ui-accent) 50%,transparent);outline-offset:-1px}
+.chk{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--ui-border);border-radius:6px;overflow:hidden;background:#fff}
+.seg button{border:0;background:none;height:32px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--ui-border)}
+.seg button.on{background:var(--ui-accent);color:#fff}
+.btn{height:32px;padding:0 12px;border:1px solid var(--ui-border);border-radius:6px;background:#fff;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:#bbb}
+.btn.pri{background:var(--ui-accent);border-color:var(--ui-accent);color:#fff}
+.btn.sm{height:26px;padding:0 8px;font-size:12px}
+.btn.icon{width:26px;padding:0;height:26px}
+.btn.danger:hover{color:#c0392b;border-color:#e3b4ae}
+.btns{display:flex;gap:6px;flex-wrap:wrap}
+.swatches{display:flex;gap:6px;flex-wrap:wrap}
+.sw{width:26px;height:26px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--ui-border);cursor:pointer}
+.hint{font-size:12px;color:var(--ui-muted);line-height:1.6}
+
+.card{background:var(--ui-panel);border:1px solid var(--ui-border);border-radius:8px;padding:10px;display:grid;gap:8px;transition:box-shadow .15s}
+.card.sel{box-shadow:0 0 0 2px var(--ui-accent)}
+.card-top{display:grid;grid-template-columns:22px 1fr 128px;gap:6px;align-items:center}
+.card-idx{font-size:12px;color:var(--ui-muted);text-align:center}
+.card-dates{display:grid;grid-template-columns:1fr 1fr 40px;gap:6px;align-items:center}
+.card-dates.single{grid-template-columns:2fr 40px}
+.card-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.card-act{display:flex;gap:4px;justify-content:flex-end;align-items:center}
+.card-act .grow{flex:1;font-size:12px;color:var(--ui-muted)}
+.card.section{background:#fafaf8}
+.col-card{display:grid;grid-template-columns:1fr 110px 64px auto;gap:6px;align-items:center}
+.list{display:grid;gap:8px}
+
+/* ---------- 主畫布 ---------- */
+.main{overflow:auto;display:flex;flex-direction:column}
+.toolbar{position:sticky;top:0;left:0;z-index:5;display:flex;gap:6px;align-items:center;padding:10px 16px;background:color-mix(in srgb,var(--canvas) 88%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--ui-border);flex-wrap:wrap}
+.toolbar .sp{flex:1}
+.stage{padding:28px;flex:1}
+.chart-wrap{display:inline-block;background:#fff;padding:32px 32px 40px;border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.06),0 4px 20px rgba(0,0,0,.05)}
+
+/* ---------- 時程表本體 ---------- */
+.chart{--primary:#5b9e9b;--label:#1b1b1b;--label-text:#fff;--head:#f2f2f0;--line:#cfcfcf;
+  font-family:"Noto Sans TC",system-ui,"PingFang TC","Microsoft JhengHei",sans-serif;color:#222}
+.chart [contenteditable]{outline:none;cursor:text}
+.chart [contenteditable]:hover{background-image:linear-gradient(transparent calc(100% - 1px),color-mix(in srgb,var(--primary) 60%,transparent) 0)}
+.chart [contenteditable]:focus{box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 45%,transparent)}
+.c-title{font-size:24px;font-weight:700;margin:0 0 20px;display:inline-block;min-width:4em}
+.c-grid{display:grid;column-gap:12px}
+.c-head{row-gap:8px;margin-bottom:18px;align-items:stretch}
+.groups,.units{display:flex}
+.g{padding:0 2px;height:46px}
+.g span{display:flex;align-items:center;justify-content:center;height:100%;background:var(--head);font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden}
+.u{height:42px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--primary);color:var(--primary);font-size:15px;line-height:1.15;white-space:nowrap;overflow:hidden}
+.u small{font-size:10px;opacity:.8}
+.u.we{background:color-mix(in srgb,var(--primary) 8%,transparent)}
+.axis{display:flex}
+.axis-box{flex:1;height:42px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1.5px var(--primary);color:var(--primary);font-size:15px;letter-spacing:.06em}
+.xh{display:flex;align-items:center;height:42px;align-self:end;font-size:15px;color:#555;white-space:nowrap}
+.xh.c{justify-content:center}
+.c-body{position:relative}
+.lab{min-width:0}
+.lab-box{height:100%;background:var(--label);color:var(--label-text);display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:15px;padding:0 10px;overflow:hidden;white-space:nowrap}
+.lab.sec .lab-box{background:none;color:var(--primary);justify-content:flex-start;padding:0 2px;border-bottom:2px solid var(--primary);font-size:16px}
+.xc{display:flex;align-items:center;font-size:15px;white-space:nowrap;overflow:hidden;min-width:0}
+.xc.c{justify-content:center}
+.xc.st{cursor:pointer;color:var(--primary)}
+.xc.dt{color:#555;font-variant-numeric:tabular-nums}
+
+.tl{position:relative;margin:-8px 0;background:#fff}
+.tl::after{content:"";position:absolute;inset:0;border:1px solid var(--line);pointer-events:none;z-index:2}
+.gl{position:absolute;top:0;bottom:0;border-left:1px dashed #e4e4e1;z-index:1}
+.gl.g2{border-left:1px solid var(--line)}
+.shade{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--primary) 6%,transparent)}
+.band{position:absolute;left:0;right:0;background:var(--head)}
+.today{position:absolute;top:0;bottom:0;border-left:2px solid #e4572e;z-index:4;pointer-events:none}
+.today span{position:absolute;bottom:-22px;left:-14px;font-size:11px;color:#e4572e;white-space:nowrap}
+.it{position:absolute;z-index:3;cursor:grab;touch-action:none}
+.it:active{cursor:grabbing}
+.it.bar{background:var(--c)}
+.it.bar .h{position:absolute;top:0;bottom:0;width:10px;cursor:ew-resize}
+.it.bar .h.l{left:-5px}.it.bar .h.r{right:-5px}
+.it.bar .bt{position:absolute;left:8px;right:8px;top:50%;transform:translateY(-50%);font-size:12px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.it.pt{transform:translate(-50%,-50%);background:var(--c)}
+.it.dot{width:16px;height:16px;border-radius:50%}
+.it.diamond{width:22px;height:22px;transform:translate(-50%,-50%) rotate(45deg)}
+.it.flag{width:20px;height:18px;clip-path:polygon(0 0,100% 0,50% 100%)}
+.it.dragging{opacity:.85;outline:2px solid color-mix(in srgb,var(--c) 40%,#fff)}
+.empty{padding:40px;color:#999;text-align:center;border:1px dashed var(--line)}
+.tip{position:fixed;z-index:50;background:#222;color:#fff;font-size:12px;padding:4px 8px;border-radius:4px;pointer-events:none;white-space:nowrap;display:none}
+
+@media (max-width:860px){
+  .app{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:auto}
+  .side{max-height:50vh;border-right:0;border-bottom:1px solid var(--ui-border)}
+  .main{overflow:visible}
+  .stage{overflow:auto;padding:16px}
+}
+
+@media print{
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  html,body{height:auto;background:#fff}
+  .side,.toolbar,.tip{display:none!important}
+  .app{display:block;height:auto}
+  .main{overflow:visible;display:block}
+  .stage{padding:0}
+  .chart-wrap{box-shadow:none;padding:0;border-radius:0}
+  .it .h{display:none}
+  .chart [contenteditable]:hover,.chart [contenteditable]:focus{background-image:none;box-shadow:none}
+  .xh,.u,.axis-box,.lab,.c-head,.tl{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side"></aside>
+  <main class="main">
+    <div class="toolbar">
+      <button class="btn" data-tb="new">開新</button>
+      <button class="btn" data-tb="open">開啟 JSON</button>
+      <button class="btn" data-tb="save">儲存 JSON</button>
+      <button class="btn pri" data-tb="pdf">匯出 PDF</button>
+      <span class="sp"></span>
+      <button class="btn" data-tb="undo" title="復原 (Ctrl/⌘+Z)">↶ 復原</button>
+      <button class="btn" data-tb="redo" title="重做 (Ctrl/⌘+Shift+Z)">↷ 重做</button>
+      <input type="file" id="file" accept=".json,application/json" hidden>
+    </div>
+    <div class="stage"><div class="chart-wrap"><div class="chart" id="chart"></div></div></div>
+  </main>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+(() => {
+'use strict';
+/* ================= 工具函式 ================= */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const uid = () => Math.random().toString(36).slice(2, 9);
+const DAY = 86400000;
+const toDay = s => { const [y, m, d] = String(s).split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / DAY); };
+const toStr = n => new Date(n * DAY).toISOString().slice(0, 10);
+const ymd = n => { const d = new Date(n * DAY); return [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), d.getUTCDay()]; };
+const mStart = (y, m) => Math.round(Date.UTC(y, m - 1, 1) / DAY);
+const mEnd = (y, m) => Math.round(Date.UTC(y, m, 0) / DAY);
+const md = n => { const [, m, d] = ymd(n); return `${m}/${d}`; };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+const todayDay = () => { const t = new Date(); return Math.round(Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()) / DAY); };
+
+const TYPES = { bar: '期間（橫條）', dot: '單日（圓點）', diamond: '舉辦日（菱形）', flag: '截止日（三角）', section: '分組標題' };
+const COLTYPES = { text: '文字', status: '進度圓餅', dates: '日期（自動）' };
+const PRESETS = [
+  { name: '協會青', primary: '#5b9e9b', label: '#1b1b1b', labelText: '#ffffff', head: '#f2f2f0' },
+  { name: '深藍', primary: '#2f5d8a', label: '#1f2a37', labelText: '#ffffff', head: '#eef2f6' },
+  { name: '暖橘', primary: '#d9822b', label: '#3a2a1c', labelText: '#ffffff', head: '#f8f1e8' },
+  { name: '森綠', primary: '#4f8a4b', label: '#22311f', labelText: '#ffffff', head: '#eff4ec' },
+  { name: '玫紅', primary: '#c44569', label: '#2b1b22', labelText: '#ffffff', head: '#f8edf0' },
+  { name: '灰階', primary: '#555555', label: '#222222', labelText: '#ffffff', head: '#efefef' },
+];
+const PAPERS = { A4L: { label: 'A4 橫向', css: 'A4 landscape', w: 1047, h: 718 }, A3L: { label: 'A3 橫向', css: 'A3 landscape', w: 1512, h: 1047 }, A4P: { label: 'A4 直向', css: 'A4 portrait', w: 718, h: 1047 } };
+
+function defaultState() {
+  const c1 = uid(), c2 = uid();
+  const r = (name, type, s, e, owner, st) => ({ id: uid(), name, type, start: s, end: e, color: '', fields: { [c1]: owner, [c2]: st } });
+  return {
+    version: 1,
+    title: '年會籌備時程', showTitle: true,
+    unit: 'week', weekMode: 'month4', weekLabel: 'index', showWeekday: true,
+    start: '2026-11-01', end: '2026-12-31',
+    axisLabel: 'WEEK',
+    colWidth: { day: 30, week: 104, month: 120 },
+    labelWidth: 230, rowHeight: 36, rowGap: 12,
+    theme: { ...PRESETS[0] },
+    showToday: true, gridLines: 'group', shadeWeekend: true, barText: false,
+    paper: 'A4L', fitPage: true,
+    columns: [
+      { id: c1, name: '負責人', type: 'text', width: 130 },
+      { id: c2, name: '狀態', type: 'status', width: 70 },
+    ],
+    rows: [
+      r('交稿與預錄回覆', 'bar', '2026-11-15', '2026-11-19', '議程窗口', 25),
+      r('議程與宣傳發布', 'bar', '2026-11-15', '2026-11-21', '美術 / 社群', 25),
+      r('人力補位與主管交接', 'bar', '2026-11-15', '2026-11-22', '林瀚', 0),
+      r('餐飲與次會場確認', 'bar', '2026-11-15', '2026-11-22', '餐飲 / 場務', 0),
+      r('預算分攤與憑證', 'bar', '2026-11-15', '2026-11-24', '財務長', 0),
+      r('影片與簡報試播', 'bar', '2026-11-22', '2026-12-03', '林世均', 0),
+      r('名冊餐券與行前通知', 'bar', '2026-11-26', '2026-12-04', '報到 / 總控', 0),
+      r('活動當日', 'diamond', '2026-12-05', '2026-12-05', '全體', 0),
+    ],
+  };
+}
+
+function normalize(s) {
+  const d = defaultState();
+  const o = Object.assign({}, d, s);
+  o.theme = Object.assign({}, d.theme, s.theme);
+  o.colWidth = Object.assign({}, d.colWidth, s.colWidth);
+  if (!Array.isArray(o.columns)) o.columns = [];
+  if (!Array.isArray(o.rows)) o.rows = [];
+  o.columns = o.columns.map(c => ({ id: c.id || uid(), name: c.name ?? '', type: COLTYPES[c.type] ? c.type : 'text', width: +c.width || 110 }));
+  o.rows = o.rows.map(r => ({ id: r.id || uid(), name: r.name ?? '', type: TYPES[r.type] ? r.type : 'bar', start: isDate(r.start) ? r.start : o.start, end: isDate(r.end) ? r.end : (isDate(r.start) ? r.start : o.start), color: r.color || '', fields: r.fields || {} }));
+  if (!isDate(o.start)) o.start = d.start;
+  if (!isDate(o.end)) o.end = d.end;
+  if (!PAPERS[o.paper]) o.paper = 'A4L';
+  return o;
+}
+
+/* ================= 狀態、儲存、歷史 ================= */
+const KEY = 'timeschedule.v1';
+let state;
+try { const raw = localStorage.getItem(KEY); state = raw ? normalize(JSON.parse(raw)) : defaultState(); } catch { state = defaultState(); }
+let lastSnap = JSON.stringify(state);
+const undoStack = [], redoStack = [];
+let selectedRow = null;
+
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
+function checkpoint() {
+  const now = JSON.stringify(state);
+  if (now === lastSnap) return;
+  undoStack.push(lastSnap); if (undoStack.length > 100) undoStack.shift();
+  redoStack.length = 0; lastSnap = now; save();
+}
+function undo() {
+  checkpoint();
+  if (!undoStack.length) return;
+  redoStack.push(lastSnap); lastSnap = undoStack.pop();
+  state = JSON.parse(lastSnap); save(); renderAll();
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(lastSnap); lastSnap = redoStack.pop();
+  state = JSON.parse(lastSnap); save(); renderAll();
+}
+const findRow = id => state.rows.find(r => r.id === id);
+const findCol = id => state.columns.find(c => c.id === id);
+
+/* ================= 時間軸計算 ================= */
+let COLS = [];
+function buildCols(S) {
+  let s = toDay(S.start), e = toDay(S.end);
+  if (e < s) [s, e] = [e, s];
+  const cols = [];
+  const [sy, sm] = ymd(s), [ey, em] = ymd(e);
+  const multiYear = sy !== ey;
+  const mLabel = (y, m) => multiYear ? `${y}年${m}月` : `${m}月`;
+  const WD = '日一二三四五六';
+  if (S.unit === 'day') {
+    for (let d = s; d <= e; d++) {
+      const [y, m, dd, wd] = ymd(d);
+      cols.push({ s: d, e: d, label: String(dd), sub: S.showWeekday ? WD[wd] : '', group: mLabel(y, m), gk: y * 12 + m, weekend: wd === 0 || wd === 6 });
+    }
+  } else if (S.unit === 'month') {
+    for (let y = sy, m = sm; y * 12 + m <= ey * 12 + em; m === 12 ? (y++, m = 1) : m++) {
+      cols.push({ s: mStart(y, m), e: mEnd(y, m), label: `${m}月`, group: `${y}年`, gk: y });
+    }
+  } else if (S.weekMode === 'iso') {
+    let d = s - ((ymd(s)[3] + 6) % 7);
+    let lastGk = null, idx = 0;
+    const gMin = sy * 12 + sm, gMax = ey * 12 + em;
+    for (; d <= e; d += 7) {
+      // 一週歸屬於「週四所在的月份」（多數天數所在月），但不超出設定範圍的首尾月份
+      const [ty, tm] = ymd(d + 3), [, m, dd] = ymd(d);
+      const gk = Math.min(Math.max(ty * 12 + tm, gMin), gMax);
+      const gy = Math.floor((gk - 1) / 12), gm = gk - gy * 12;
+      idx = gk === lastGk ? idx + 1 : 1; lastGk = gk;
+      cols.push({ s: d, e: d + 6, label: S.weekLabel === 'date' ? `${m}/${dd}` : String(idx), group: mLabel(gy, gm), gk });
+    }
+  } else {
+    for (let y = sy, m = sm; y * 12 + m <= ey * 12 + em; m === 12 ? (y++, m = 1) : m++) {
+      const ms = mStart(y, m), me = mEnd(y, m);
+      for (let k = 0; k < 4; k++) {
+        const ws = ms + 7 * k, we = k < 3 ? ws + 6 : me;
+        cols.push({ s: ws, e: we, label: S.weekLabel === 'date' ? `${m}/${1 + 7 * k}` : String(k + 1), group: mLabel(y, m), gk: y * 12 + m });
+      }
+    }
+  }
+  const groups = [];
+  cols.forEach((c, i) => {
+    const g = groups[groups.length - 1];
+    if (g && g.gk === c.gk) g.count++; else groups.push({ gk: c.gk, label: c.group, count: 1, first: i });
+  });
+  return { cols, groups };
+}
+function colIndex(d) {
+  let lo = 0, hi = COLS.length - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (COLS[mid].e < d) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+// 日期 → 0~1 位置；mode: start=當天開頭, end=當天結尾, mid=當天中點
+function fracOf(d, mode) {
+  const N = COLS.length; if (!N) return 0;
+  if (d < COLS[0].s) return 0;
+  if (d > COLS[N - 1].e) return 1;
+  const i = colIndex(d), c = COLS[i], len = c.e - c.s + 1;
+  const off = d - c.s + (mode === 'start' ? 0 : mode === 'end' ? 1 : 0.5);
+  return (i + off / len) / N;
+}
+function fracToDay(f) {
+  const N = COLS.length;
+  const x = Math.min(Math.max(f, 0), 0.999999) * N, i = Math.floor(x), c = COLS[i];
+  return c.s + Math.floor((x - i) * (c.e - c.s + 1));
+}
+
+/* ================= 圖表渲染 ================= */
+const chart = $('#chart');
+function pie(p) {
+  p = +p || 0; const r = 9.5, c = 12;
+  let fill = '';
+  if (p >= 100) fill = `<circle cx="${c}" cy="${c}" r="${r}" fill="currentColor"/>`;
+  else if (p > 0) {
+    const a = p / 100 * 2 * Math.PI, x = c + r * Math.sin(a), y = c - r * Math.cos(a);
+    fill = `<path d="M${c} ${c}L${c} ${c - r}A${r} ${r} 0 ${p > 50 ? 1 : 0} 1 ${x.toFixed(2)} ${y.toFixed(2)}Z" fill="currentColor"/>`;
+  }
+  return `<svg width="24" height="24" viewBox="0 0 24 24" aria-label="${p}%">${fill}<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`;
+}
+function rowDates(r) {
+  let a = toDay(r.start), b = toDay(r.end || r.start);
+  if (r.type !== 'bar') b = a;
+  if (b < a) [a, b] = [b, a];
+  return [a, b];
+}
+function datesText(r) {
+  if (r.type === 'section') return '';
+  const [a, b] = rowDates(r);
+  return a === b ? md(a) : `${md(a)}–${md(b)}`;
+}
+function itemGeom(r, W) {
+  const [a, b] = rowDates(r);
+  if (r.type === 'bar') { const x1 = fracOf(a, 'start') * W, x2 = fracOf(b, 'end') * W; return { left: x1, width: Math.max(x2 - x1, 3) }; }
+  return { left: fracOf(a, 'mid') * W };
+}
+const PAD = 8;
+
+function renderChart() {
+  const S = state, T = S.theme;
+  const { cols, groups } = buildCols(S); COLS = cols;
+  const N = cols.length, cw = S.colWidth[S.unit] || 60, W = N * cw;
+  chart.style.setProperty('--primary', T.primary);
+  chart.style.setProperty('--label', T.label);
+  chart.style.setProperty('--label-text', T.labelText);
+  chart.style.setProperty('--head', T.head);
+  const gridCols = [S.labelWidth + 'px', W + 'px', ...S.columns.map(c => c.width + 'px')].join(' ');
+  const blanks = S.columns.map(() => '<div></div>').join('');
+  let h = '';
+  if (S.showTitle) h += `<div><div class="c-title" contenteditable="plaintext-only" data-edit="title" spellcheck="false">${esc(S.title)}</div></div>`;
+  h += `<div class="c-grid c-head" style="grid-template-columns:${gridCols}">`;
+  h += `<div></div><div class="groups">${groups.map(g => `<div class="g" style="width:${g.count * cw}px"><span>${esc(g.label)}</span></div>`).join('')}</div>${blanks}`;
+  h += `<div class="axis"><div class="axis-box" contenteditable="plaintext-only" data-edit="axisLabel" spellcheck="false">${esc(S.axisLabel)}</div></div>`;
+  h += `<div class="units">${cols.map(c => `<div class="u${c.weekend && S.shadeWeekend ? ' we' : ''}" style="width:${cw}px">${esc(c.label)}${c.sub ? `<small>${c.sub}</small>` : ''}</div>`).join('')}</div>`;
+  h += S.columns.map(c => `<div class="xh${c.type === 'text' ? '' : ' c'}" contenteditable="plaintext-only" data-edit="colname" data-col="${c.id}" spellcheck="false">${esc(c.name)}</div>`).join('');
+  h += `</div>`;
+
+  const n = S.rows.length, rh = S.rowHeight, gap = S.rowGap;
+  if (!n) {
+    h += `<div class="empty">尚無任何列，從左側「列」新增任務</div>`;
+  } else {
+    h += `<div class="c-grid c-body" style="grid-template-columns:${gridCols};grid-template-rows:repeat(${n},${rh}px);row-gap:${gap}px">`;
+    S.rows.forEach((r, i) => {
+      const gr = `grid-row:${i + 1}`;
+      h += `<div class="lab${r.type === 'section' ? ' sec' : ''}" style="grid-column:1;${gr}"><div class="lab-box" contenteditable="plaintext-only" data-edit="rowname" data-row="${r.id}" spellcheck="false">${esc(r.name)}</div></div>`;
+      S.columns.forEach((c, j) => {
+        const pos = `grid-column:${j + 3};${gr}`;
+        if (r.type === 'section') { h += `<div style="${pos}"></div>`; return; }
+        const v = r.fields[c.id];
+        if (c.type === 'status') h += `<div class="xc st c" style="${pos}" data-act="status" data-row="${r.id}" data-col="${c.id}" title="點一下切換進度">${pie(v)}</div>`;
+        else if (c.type === 'dates') h += `<div class="xc dt" style="${pos}" data-dates="${r.id}">${datesText(r)}</div>`;
+        else h += `<div class="xc" style="${pos}" contenteditable="plaintext-only" data-edit="field" data-row="${r.id}" data-col="${c.id}" spellcheck="false">${esc(v)}</div>`;
+      });
+    });
+    // 時間軸主體
+    let tl = '';
+    if (S.unit === 'day' && S.shadeWeekend) cols.forEach((c, i) => { if (c.weekend) tl += `<div class="shade" style="left:${i * cw}px;width:${cw}px"></div>`; });
+    S.rows.forEach((r, i) => { if (r.type === 'section') tl += `<div class="band" style="top:${PAD + i * (rh + gap)}px;height:${rh}px"></div>`; });
+    const groupStarts = new Set(groups.map(g => g.first));
+    for (let i = 1; i < N; i++) {
+      if (S.gridLines !== 'none' && groupStarts.has(i)) tl += `<div class="gl g2" style="left:${i * cw}px"></div>`;
+      else if (S.gridLines === 'all') tl += `<div class="gl" style="left:${i * cw}px"></div>`;
+    }
+    S.rows.forEach((r, i) => {
+      if (r.type === 'section') return;
+      const cy = PAD + i * (rh + gap) + rh / 2, color = r.color || T.primary, g = itemGeom(r, W);
+      const tip = `${esc(r.name)}｜${datesText(r)}`;
+      if (r.type === 'bar') {
+        const bh = Math.round(rh * 0.92);
+        tl += `<div class="it bar" data-row="${r.id}" data-tip="${tip}" style="--c:${color};left:${g.left}px;width:${g.width}px;top:${cy - bh / 2}px;height:${bh}px"><i class="h l"></i><i class="h r"></i>${S.barText ? `<span class="bt">${esc(r.name)}</span>` : ''}</div>`;
+      } else {
+        tl += `<div class="it pt ${r.type}" data-row="${r.id}" data-tip="${tip}" style="--c:${color};left:${g.left}px;top:${cy}px"></div>`;
+      }
+    });
+    if (S.showToday) {
+      const t = todayDay();
+      if (N && t >= COLS[0].s && t <= COLS[N - 1].e) tl += `<div class="today" style="left:${fracOf(t, 'mid') * W}px"><span>今天 ${md(t)}</span></div>`;
+    }
+    h += `<div class="tl" id="tl" style="grid-column:2;grid-row:1/${n + 1};width:${W}px">${tl}</div>`;
+    h += `</div>`;
+  }
+  chart.innerHTML = h;
+  updatePageStyle();
+}
+
+/* ================= 側邊編輯器渲染 ================= */
+const side = $('#side');
+const opt = (obj, v) => Object.entries(obj).map(([k, l]) => `<option value="${k}"${k === v ? ' selected' : ''}>${l}</option>`).join('');
+function renderEditor() {
+  const S = state, T = S.theme;
+  const unitBtn = (u, l) => `<button data-act="unit" data-v="${u}" class="${S.unit === u ? 'on' : ''}">${l}</button>`;
+  const openState = {};
+  $$('details.sec', side).forEach(d => openState[d.dataset.s] = d.open);
+  const isOpen = (k, def) => (k in openState ? openState[k] : def) ? ' open' : '';
+
+  let h = `<div class="brand">時程表產生器 <small>拖曳圖示可改日期・圖上文字可直接點改</small></div>`;
+
+  h += `<details class="sec" data-s="axis"${isOpen('axis', true)}><summary>標題與時間軸</summary><div class="sec-body">
+    <label class="fld"><span>標題</span><input type="text" data-k="title" value="${esc(S.title)}"></label>
+    <label class="chk"><input type="checkbox" data-k="showTitle"${S.showTitle ? ' checked' : ''}>顯示標題</label>
+    <div class="row2">
+      <label class="fld"><span>開始日期</span><input type="date" data-k="start" value="${S.start}"></label>
+      <label class="fld"><span>結束日期</span><input type="date" data-k="end" value="${S.end}"></label>
+    </div>
+    <div class="fld"><span>時間單位</span><div class="seg">${unitBtn('day', '日')}${unitBtn('week', '週')}${unitBtn('month', '月')}</div></div>
+    ${S.unit === 'week' ? `<div class="row2">
+      <label class="fld"><span>週的切法</span><select data-k="weekMode" data-re="1">${opt({ month4: '每月固定 4 週', iso: '日曆週（週一起）' }, S.weekMode)}</select></label>
+      <label class="fld"><span>週標籤</span><select data-k="weekLabel">${opt({ index: '1、2、3、4', date: '起始日 11/1' }, S.weekLabel)}</select></label>
+    </div>` : ''}
+    ${S.unit === 'day' ? `<label class="chk"><input type="checkbox" data-k="showWeekday"${S.showWeekday ? ' checked' : ''}>顯示星期</label>` : ''}
+    <div class="row3">
+      <label class="fld"><span>軸標題</span><input type="text" data-k="axisLabel" value="${esc(S.axisLabel)}"></label>
+      <label class="fld"><span>單位欄寬</span><input type="number" min="12" max="400" data-k="colWidth.${S.unit}" value="${S.colWidth[S.unit]}"></label>
+      <label class="fld"><span>任務欄寬</span><input type="number" min="60" max="600" data-k="labelWidth" value="${S.labelWidth}"></label>
+    </div>
+    <div class="row2">
+      <label class="fld"><span>列高</span><input type="number" min="20" max="120" data-k="rowHeight" value="${S.rowHeight}"></label>
+      <label class="fld"><span>列距</span><input type="number" min="0" max="60" data-k="rowGap" value="${S.rowGap}"></label>
+    </div>
+  </div></details>`;
+
+  h += `<details class="sec" data-s="look"${isOpen('look', false)}><summary>外觀</summary><div class="sec-body">
+    <div class="fld"><span>配色預設</span><div class="swatches">${PRESETS.map((p, i) => `<button class="sw" title="${p.name}" data-act="preset" data-v="${i}" style="background:${p.primary}"></button>`).join('')}</div></div>
+    <div class="row2">
+      <label class="fld"><span>主色（線框、圖示）</span><input type="color" data-k="theme.primary" value="${T.primary}"></label>
+      <label class="fld"><span>表頭底色</span><input type="color" data-k="theme.head" value="${T.head}"></label>
+      <label class="fld"><span>任務標籤底色</span><input type="color" data-k="theme.label" value="${T.label}"></label>
+      <label class="fld"><span>任務標籤文字</span><input type="color" data-k="theme.labelText" value="${T.labelText}"></label>
+    </div>
+    <label class="fld"><span>格線</span><select data-k="gridLines">${opt({ group: '只畫月份（年份）分隔', all: '每個單位都畫', none: '不畫' }, S.gridLines)}</select></label>
+    <label class="chk"><input type="checkbox" data-k="showToday"${S.showToday ? ' checked' : ''}>標示今天</label>
+    <label class="chk"><input type="checkbox" data-k="shadeWeekend"${S.shadeWeekend ? ' checked' : ''}>週末底色（日模式）</label>
+    <label class="chk"><input type="checkbox" data-k="barText"${S.barText ? ' checked' : ''}>橫條內顯示任務名稱</label>
+  </div></details>`;
+
+  h += `<details class="sec" data-s="cols"${isOpen('cols', false)}><summary>附加欄位（右側直欄）</summary><div class="sec-body">
+    <div class="list">${S.columns.map((c, i) => `<div class="col-card">
+      <input type="text" data-k="col:${c.id}:name" value="${esc(c.name)}" placeholder="欄名">
+      <select data-k="col:${c.id}:type" data-re="1">${opt(COLTYPES, c.type)}</select>
+      <input type="number" min="30" max="500" data-k="col:${c.id}:width" value="${c.width}" title="欄寬">
+      <span class="btns"><button class="btn icon" data-act="colUp" data-id="${c.id}" ${i ? '' : 'disabled'}>↑</button><button class="btn icon danger" data-act="colDel" data-id="${c.id}">✕</button></span>
+    </div>`).join('') || '<div class="hint">目前沒有附加欄位</div>'}</div>
+    <div class="btns"><button class="btn sm" data-act="addCol">＋ 新增欄位</button></div>
+    <div class="hint">「進度圓餅」在圖上點一下即可切換 0→25→50→75→100%；「日期（自動）」會依任務日期顯示。</div>
+  </div></details>`;
+
+  const editableCols = S.columns.filter(c => c.type !== 'dates');
+  h += `<details class="sec" data-s="rows"${isOpen('rows', true)}><summary>列（任務）<span class="hint" style="margin-left:auto;margin-right:8px">${S.rows.length} 列</span></summary><div class="sec-body">
+    <div class="list">${S.rows.map((r, i) => {
+      const sec = r.type === 'section', single = r.type !== 'bar';
+      return `<div class="card${sec ? ' section' : ''}${selectedRow === r.id ? ' sel' : ''}" data-card="${r.id}">
+        <div class="card-top"><span class="card-idx">${i + 1}</span><input type="text" data-k="row:${r.id}:name" value="${esc(r.name)}" placeholder="${sec ? '分組名稱' : '任務名稱'}"><select data-k="row:${r.id}:type" data-re="1">${opt(TYPES, r.type)}</select></div>
+        ${sec ? '' : `<div class="card-dates${single ? ' single' : ''}">
+          <input type="date" data-k="row:${r.id}:start" value="${r.start}" title="${single ? '日期' : '開始'}">
+          ${single ? '' : `<input type="date" data-k="row:${r.id}:end" value="${r.end}" title="結束">`}
+          <input type="color" data-k="row:${r.id}:color" value="${r.color || T.primary}" title="顏色（未設定時用主色）">
+        </div>
+        ${editableCols.length ? `<div class="card-fields">${editableCols.map(c => c.type === 'status'
+          ? `<label class="fld"><span>${esc(c.name)}</span><select data-k="row:${r.id}:f:${c.id}">${[0, 25, 50, 75, 100].map(p => `<option value="${p}"${(+r.fields[c.id] || 0) === p ? ' selected' : ''}>${p}%</option>`).join('')}</select></label>`
+          : `<label class="fld"><span>${esc(c.name)}</span><input type="text" data-k="row:${r.id}:f:${c.id}" value="${esc(r.fields[c.id])}"></label>`).join('')}</div>` : ''}`}
+        <div class="card-act"><span class="grow">${r.color ? `<button class="btn sm" data-act="resetColor" data-id="${r.id}">還原主色</button>` : ''}</span>
+          <button class="btn icon" data-act="rowUp" data-id="${r.id}" title="上移" ${i ? '' : 'disabled'}>↑</button>
+          <button class="btn icon" data-act="rowDown" data-id="${r.id}" title="下移" ${i < S.rows.length - 1 ? '' : 'disabled'}>↓</button>
+          <button class="btn sm" data-act="rowDup" data-id="${r.id}">複製</button>
+          <button class="btn sm danger" data-act="rowDel" data-id="${r.id}">刪除</button>
+        </div>
+      </div>`;
+    }).join('')}</div>
+    <div class="btns"><button class="btn sm" data-act="addRow">＋ 任務</button><button class="btn sm" data-act="addPoint">＋ 舉辦日</button><button class="btn sm" data-act="addSection">＋ 分組標題</button></div>
+  </div></details>`;
+
+  h += `<details class="sec" data-s="out"${isOpen('out', false)}><summary>輸出設定</summary><div class="sec-body">
+    <label class="fld"><span>PDF 紙張</span><select data-k="paper">${opt(Object.fromEntries(Object.entries(PAPERS).map(([k, v]) => [k, v.label])), S.paper)}</select></label>
+    <label class="chk"><input type="checkbox" data-k="fitPage"${S.fitPage ? ' checked' : ''}>自動縮放成單頁</label>
+    <div class="hint">按「匯出 PDF」後，在列印視窗的目的地選「另存為 PDF」。資料會自動暫存在這台電腦的瀏覽器；要換電腦或分享請用「儲存 JSON」。</div>
+  </div></details>`;
+
+  const scroll = side.scrollTop;
+  side.innerHTML = h;
+  side.scrollTop = scroll;
+}
+function renderAll() { renderEditor(); renderChart(); }
+
+/* ================= 編輯器事件 ================= */
+function setK(k, v) {
+  const p = k.split(':');
+  if (p[0] === 'row') {
+    const r = findRow(p[1]); if (!r) return;
+    if (p[2] === 'f') r.fields[p[3]] = v;
+    else if (p[2] === 'type') {
+      r.type = v;
+      if (v === 'bar' && toDay(r.end) <= toDay(r.start)) r.end = toStr(toDay(r.start) + 6);
+      if (v !== 'bar' && v !== 'section') r.end = r.start;
+    } else r[p[2]] = v;
+    return;
+  }
+  if (p[0] === 'col') { const c = findCol(p[1]); if (c) c[p[2]] = v; return; }
+  const path = k.split('.'); let o = state;
+  for (let i = 0; i < path.length - 1; i++) o = o[path[i]];
+  o[path[path.length - 1]] = v;
+}
+function readVal(t) {
+  if (t.type === 'checkbox') return t.checked;
+  if (t.type === 'number') { const n = Number(t.value); return isFinite(n) && t.value !== '' ? Math.max(+t.min || -Infinity, Math.min(+t.max || Infinity, n)) : undefined; }
+  if (t.dataset.k.includes(':f:') && t.tagName === 'SELECT') return Number(t.value);
+  return t.value;
+}
+side.addEventListener('input', e => {
+  const t = e.target; if (!t.dataset.k) return;
+  const v = readVal(t);
+  if (v === undefined) return;
+  if (t.type === 'date' && !isDate(v)) return;
+  setK(t.dataset.k, v);
+  if (t.type === 'checkbox' || t.tagName === 'SELECT') return;
+  save(); renderChart();
+});
+side.addEventListener('change', e => {
+  const t = e.target; if (!t.dataset.k) return;
+  const v = readVal(t);
+  if (v !== undefined && !(t.type === 'date' && !isDate(v))) setK(t.dataset.k, v);
+  if (t.dataset.k.endsWith(':start')) { // 起日晚於迄日時同步
+    const r = findRow(t.dataset.k.split(':')[1]);
+    if (r && (r.type !== 'bar' || toDay(r.end) < toDay(r.start))) { r.end = r.start; const ei = $(`[data-k="row:${r.id}:end"]`, side); if (ei) ei.value = r.end; }
+  }
+  checkpoint();
+  if (t.dataset.re || t.dataset.k.endsWith(':color')) renderAll(); else renderChart();
+});
+
+side.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const S = state, id = b.dataset.id, act = b.dataset.act;
+  const ri = S.rows.findIndex(r => r.id === id), ci = S.columns.findIndex(c => c.id === id);
+  const nextStart = () => {
+    const last = [...S.rows].reverse().find(r => r.type !== 'section');
+    return last ? toDay(last.end || last.start) + 1 : toDay(S.start);
+  };
+  const newFields = () => Object.fromEntries(S.columns.map(c => [c.id, c.type === 'status' ? 0 : '']));
+  switch (act) {
+    case 'unit': {
+      const AX = { day: 'DAY', week: 'WEEK', month: 'MONTH' };
+      if (Object.values(AX).includes(S.axisLabel)) S.axisLabel = AX[b.dataset.v];
+      S.unit = b.dataset.v; break;
+    }
+    case 'preset': { const p = PRESETS[+b.dataset.v]; Object.assign(S.theme, { primary: p.primary, label: p.label, labelText: p.labelText, head: p.head }); break; }
+    case 'addRow': { const s = nextStart(); S.rows.push({ id: uid(), name: '新任務', type: 'bar', start: toStr(s), end: toStr(s + 6), color: '', fields: newFields() }); selectedRow = S.rows[S.rows.length - 1].id; break; }
+    case 'addPoint': { const s = nextStart(); S.rows.push({ id: uid(), name: '活動當日', type: 'diamond', start: toStr(s), end: toStr(s), color: '', fields: newFields() }); selectedRow = S.rows[S.rows.length - 1].id; break; }
+    case 'addSection': S.rows.push({ id: uid(), name: '新分組', type: 'section', start: S.start, end: S.start, color: '', fields: {} }); break;
+    case 'rowUp': if (ri > 0) [S.rows[ri - 1], S.rows[ri]] = [S.rows[ri], S.rows[ri - 1]]; break;
+    case 'rowDown': if (ri < S.rows.length - 1) [S.rows[ri + 1], S.rows[ri]] = [S.rows[ri], S.rows[ri + 1]]; break;
+    case 'rowDup': { const c = JSON.parse(JSON.stringify(S.rows[ri])); c.id = uid(); c.name += '（複本）'; S.rows.splice(ri + 1, 0, c); selectedRow = c.id; break; }
+    case 'rowDel': S.rows.splice(ri, 1); break;
+    case 'resetColor': S.rows[ri].color = ''; break;
+    case 'addCol': S.columns.push({ id: uid(), name: '新欄位', type: 'text', width: 110 }); break;
+    case 'colUp': if (ci > 0) [S.columns[ci - 1], S.columns[ci]] = [S.columns[ci], S.columns[ci - 1]]; break;
+    case 'colDel': {
+      const c = S.columns[ci];
+      if (!confirm(`刪除欄位「${c.name}」？所有列在此欄的內容也會一併刪除。`)) return;
+      S.columns.splice(ci, 1); S.rows.forEach(r => delete r.fields[c.id]); break;
+    }
+    default: return;
+  }
+  checkpoint(); renderAll();
+  if (selectedRow && (act === 'addRow' || act === 'addPoint' || act === 'rowDup')) {
+    const card = $(`[data-card="${selectedRow}"]`, side);
+    if (card) { card.scrollIntoView({ block: 'nearest' }); $('input[type=text]', card)?.select(); }
+  }
+});
+
+/* ================= 圖表事件：直接編輯、進度切換、拖曳 ================= */
+function highlightCard(id) {
+  selectedRow = id;
+  $$('.card', side).forEach(c => c.classList.toggle('sel', c.dataset.card === id));
+  const det = $('details[data-s="rows"]', side);
+  const card = $(`[data-card="${id}"]`, side);
+  if (card && det?.open) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+chart.addEventListener('keydown', e => {
+  if (e.target.isContentEditable && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+  if (e.target.isContentEditable && e.key === 'Escape') { e.target.blur(); }
+});
+chart.addEventListener('paste', e => {
+  if (!e.target.isContentEditable) return;
+  e.preventDefault();
+  const text = (e.clipboardData.getData('text/plain') || '').replace(/\s*\n\s*/g, ' ');
+  document.execCommand('insertText', false, text);
+});
+chart.addEventListener('focusin', e => { const id = e.target.dataset.row; if (id) highlightCard(id); });
+chart.addEventListener('focusout', e => {
+  const t = e.target; if (!t.isContentEditable) return;
+  const v = t.innerText.replace(/\s+/g, ' ').trim();
+  const kind = t.dataset.edit;
+  let key;
+  if (kind === 'title') { state.title = v; key = 'title'; }
+  else if (kind === 'axisLabel') { state.axisLabel = v; key = 'axisLabel'; }
+  else if (kind === 'colname') { const c = findCol(t.dataset.col); if (c) c.name = v; key = `col:${t.dataset.col}:name`; }
+  else if (kind === 'rowname') { const r = findRow(t.dataset.row); if (r) r.name = v; key = `row:${t.dataset.row}:name`; }
+  else if (kind === 'field') { const r = findRow(t.dataset.row); if (r) r.fields[t.dataset.col] = v; key = `row:${t.dataset.row}:f:${t.dataset.col}`; }
+  const inp = key && $(`[data-k="${key}"]`, side);
+  if (inp) inp.value = v;
+  checkpoint();
+  if (kind === 'colname') renderEditor();
+});
+chart.addEventListener('click', e => {
+  const st = e.target.closest('[data-act="status"]');
+  if (st) {
+    const r = findRow(st.dataset.row); if (!r) return;
+    const cur = +r.fields[st.dataset.col] || 0;
+    r.fields[st.dataset.col] = cur >= 100 ? 0 : Math.floor(cur / 25) * 25 + 25;
+    st.innerHTML = pie(r.fields[st.dataset.col]);
+    const sel = $(`[data-k="row:${r.id}:f:${st.dataset.col}"]`, side); if (sel) sel.value = r.fields[st.dataset.col];
+    checkpoint(); highlightCard(r.id);
+  }
+});
+
+const tip = $('#tip');
+function showTip(text, x, y) { tip.textContent = text; tip.style.display = 'block'; tip.style.left = (x + 14) + 'px'; tip.style.top = (y + 14) + 'px'; }
+function hideTip() { tip.style.display = 'none'; }
+chart.addEventListener('pointerover', e => { const it = e.target.closest('.it'); if (it && !drag) showTip(it.dataset.tip, e.clientX, e.clientY); });
+chart.addEventListener('pointermove', e => { const it = e.target.closest('.it'); if (it && !drag) showTip(it.dataset.tip, e.clientX, e.clientY); });
+chart.addEventListener('pointerout', e => { if (!drag && e.target.closest('.it')) hideTip(); });
+
+let drag = null;
+chart.addEventListener('pointerdown', e => {
+  const it = e.target.closest('.it'); if (!it || e.button !== 0) return;
+  e.preventDefault();
+  const r = findRow(it.dataset.row); if (!r) return;
+  const tl = it.parentElement, W = tl.clientWidth;
+  const fx = x => (x - tl.getBoundingClientRect().left) / W;
+  const mode = e.target.classList.contains('l') ? 'l' : e.target.classList.contains('r') ? 'r' : 'm';
+  const [a, b] = rowDates(r);
+  drag = { it, r, W, fx, mode, grab: fracToDay(fx(e.clientX)), a, b, na: a, nb: b, moved: false };
+  it.setPointerCapture(e.pointerId);
+  it.classList.add('dragging');
+  highlightCard(r.id);
+});
+chart.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const d = fracToDay(drag.fx(e.clientX)) - drag.grab;
+  let na = drag.a, nb = drag.b;
+  if (drag.mode === 'm') { na += d; nb += d; }
+  else if (drag.mode === 'l') na = Math.min(drag.a + d, drag.b);
+  else nb = Math.max(drag.b + d, drag.a);
+  if (na === drag.na && nb === drag.nb) { showTip(`${md(na)}${na !== nb ? '–' + md(nb) : ''}`, e.clientX, e.clientY); return; }
+  drag.na = na; drag.nb = nb; drag.moved = true;
+  if (drag.r.type === 'bar') {
+    const x1 = fracOf(na, 'start') * drag.W, x2 = fracOf(nb, 'end') * drag.W;
+    drag.it.style.left = x1 + 'px'; drag.it.style.width = Math.max(x2 - x1, 3) + 'px';
+  } else drag.it.style.left = fracOf(na, 'mid') * drag.W + 'px';
+  showTip(`${md(na)}${na !== nb ? '–' + md(nb) : ''}`, e.clientX, e.clientY);
+});
+function endDrag() {
+  if (!drag) return;
+  const { r, na, nb, moved } = drag;
+  drag.it.classList.remove('dragging');
+  drag = null; hideTip();
+  if (!moved) return;
+  r.start = toStr(na); r.end = toStr(nb);
+  const si = $(`[data-k="row:${r.id}:start"]`, side), ei = $(`[data-k="row:${r.id}:end"]`, side);
+  if (si) si.value = r.start; if (ei) ei.value = r.end;
+  checkpoint(); renderChart();
+}
+chart.addEventListener('pointerup', endDrag);
+chart.addEventListener('pointercancel', endDrag);
+
+/* ================= 工具列 ================= */
+const fileInput = $('#file');
+function download(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+$('.toolbar').addEventListener('click', e => {
+  const b = e.target.closest('[data-tb]'); if (!b) return;
+  switch (b.dataset.tb) {
+    case 'new':
+      if (!confirm('開一份新的空白時程表？目前內容可先用「儲存 JSON」備份。')) return;
+      checkpoint();
+      { const d = defaultState(), t = todayDay(), [y, m] = ymd(t);
+        d.title = '未命名時程表'; d.rows = []; d.start = toStr(mStart(y, m)); d.end = toStr(mEnd(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1));
+        state = d; }
+      checkpoint(); renderAll(); break;
+    case 'open': fileInput.click(); break;
+    case 'save': checkpoint(); download(`${(state.title || '時程表').replace(/[\\/:*?"<>|]/g, '_')}.json`, JSON.stringify(state, null, 2)); break;
+    case 'pdf': checkpoint(); window.print(); break;
+    case 'undo': undo(); break;
+    case 'redo': redo(); break;
+  }
+});
+fileInput.addEventListener('change', async () => {
+  const f = fileInput.files[0]; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (!data || !Array.isArray(data.rows)) throw new Error('格式不符');
+    checkpoint(); state = normalize(data); checkpoint(); selectedRow = null; renderAll();
+  } catch (err) { alert('無法讀取這個檔案：' + err.message); }
+  fileInput.value = '';
+});
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (t.isContentEditable || /INPUT|SELECT|TEXTAREA/.test(t.tagName)) return;
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+});
+
+/* ================= 列印（PDF） ================= */
+function updatePageStyle() { $('#page-style').textContent = `@page{size:${PAPERS[state.paper].css};margin:10mm}`; }
+window.addEventListener('beforeprint', () => {
+  if (document.activeElement && document.activeElement.isContentEditable) document.activeElement.blur();
+  const p = PAPERS[state.paper];
+  chart.style.zoom = '';
+  if (!state.fitPage) return;
+  const w = chart.scrollWidth, h = chart.scrollHeight;
+  const z = Math.min(1, p.w / w, p.h / h);
+  if (z < 1) chart.style.zoom = z.toFixed(4);
+});
+window.addEventListener('afterprint', () => { chart.style.zoom = ''; });
+
+renderAll();
+})();
+</script>
+</body>
+</html>
