@@ -3,7 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>時程表產生器</title>
+<title>Nolan｜時程表產生器</title>
+<meta name="description" content="在瀏覽器排甘特式時程表：日／週／月時間軸、專案分色、拖曳編輯，可下載 PDF 或 JPG 放進企劃書。">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Nolan｜時程表產生器">
+<meta property="og:description" content="拖一拖就排好時程，下載 PDF／JPG 直接放進企劃書。">
+<meta property="og:url" content="https://nolanchian.github.io/timeschedule/">
+<meta property="og:image" content="https://nolanchian.github.io/timeschedule/og.png">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -118,10 +127,11 @@ dialog.set::backdrop{background:rgba(20,20,18,.28)}
 .set-b{padding:0 24px 24px}
 .set-b h4{margin:20px 0 6px;font-size:12px;font-weight:500;color:var(--muted);letter-spacing:.04em}
 .set-b h4:first-child{margin-top:4px}
-.fr{display:grid;grid-template-columns:1fr 200px;align-items:center;gap:12px;min-height:40px;border-bottom:1px solid var(--subtle)}
+.fr{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;min-height:40px;border-bottom:1px solid var(--subtle)}
 .fr>span{font-size:13px}
 .fr>span small{display:block;color:var(--muted);font-size:12px}
-.fr .ctl{display:flex;justify-content:flex-end}
+.fr .ctl{display:flex;justify-content:flex-end;min-width:200px}
+.seg button{white-space:nowrap}
 .fr input[type=color]{width:48px;height:28px;padding:0;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer}
 .colrow{display:grid;grid-template-columns:1fr 120px 64px auto;gap:6px;align-items:center;padding:4px 0}
 
@@ -131,32 +141,32 @@ dialog.set::backdrop{background:rgba(20,20,18,.28)}
 .chart-wrap{display:inline-block;background:#fff;padding:40px 40px 44px;border-radius:12px;border:1px solid var(--border)}
 
 /* ================= 時程表本體 ================= */
-.chart{--primary:#5b9e9b;--head:#f2f2f0;--line:#d4d4d0;font-family:var(--font);color:#222}
+.chart{--fs:1;--primary:#5b9e9b;--head:#f2f2f0;--line:#d4d4d0;font-family:var(--font);color:#222}
 .chart [contenteditable]{outline:none;cursor:text;border-radius:2px}
 .chart [contenteditable]:hover{box-shadow:0 0 0 2px rgba(0,0,0,.06)}
 .chart [contenteditable]:focus{box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 50%,transparent)}
-.c-title{font-size:24px;font-weight:700;margin:0 0 14px;display:inline-block;min-width:4em}
-.legend{display:flex;flex-wrap:wrap;gap:6px 20px;margin:0 0 24px;font-size:14px;color:#444}
+.c-title{font-size:calc(24px*var(--fs));font-weight:700;margin:0 0 14px;display:inline-block;min-width:4em}
+.legend{display:flex;flex-wrap:wrap;gap:6px 20px;margin:0 0 24px;font-size:calc(14px*var(--fs));color:#444}
 .legend span{display:inline-flex;align-items:center;gap:8px}
-.legend i{width:12px;height:12px;border-radius:2px;background:var(--c)}
+.legend i{width:calc(12px*var(--fs));height:calc(12px*var(--fs));border-radius:2px;background:var(--c)}
 .c-grid{display:grid;column-gap:12px}
 .c-head{row-gap:8px;margin-bottom:18px}
 .groups,.units{display:flex}
-.g{padding:0 2px;height:46px}
-.g span{display:flex;align-items:center;justify-content:center;height:100%;background:var(--head);font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden}
-.u{height:42px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--primary);color:var(--primary);font-size:15px;line-height:1.15;white-space:nowrap;overflow:hidden}
-.u small{font-size:10px;opacity:.8}
+.g{padding:0 2px;height:calc(46px*var(--fs))}
+.g span{display:flex;align-items:center;justify-content:center;height:100%;background:var(--head);font-weight:700;font-size:calc(16px*var(--fs));white-space:nowrap;overflow:hidden}
+.u{height:calc(42px*var(--fs));display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--primary);color:var(--primary);font-size:calc(15px*var(--fs));line-height:1.15;white-space:nowrap;overflow:hidden}
+.u small{font-size:calc(10px*var(--fs));opacity:.8}
 .u.we{background:color-mix(in srgb,var(--primary) 8%,transparent)}
 .axis{display:flex}
-.axis-box{flex:1;height:42px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1.5px var(--primary);color:var(--primary);font-size:15px;letter-spacing:.06em}
-.xh{display:flex;align-items:center;height:42px;font-size:15px;color:#555;white-space:nowrap}
+.axis-box{flex:1;height:calc(42px*var(--fs));display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1.5px var(--primary);color:var(--primary);font-size:calc(15px*var(--fs));letter-spacing:.06em}
+.xh{display:flex;align-items:center;height:calc(42px*var(--fs));font-size:calc(15px*var(--fs));color:#555;white-space:nowrap}
 .xh.c{justify-content:center}
 .lab{min-width:0;cursor:grab;user-select:none;-webkit-user-select:none}
 .lab-box[contenteditable]{user-select:text;-webkit-user-select:text;cursor:text}
 .lab.dragging-src{opacity:.35}
-.lab-box{height:100%;background:var(--pc);color:var(--pt);display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:15px;padding:0 10px;overflow:hidden;white-space:nowrap}
-.lab.sec .lab-box{background:none;color:#333;justify-content:flex-start;padding:0 2px;border-bottom:2px solid #333;font-size:16px}
-.xc{display:flex;align-items:center;font-size:15px;white-space:nowrap;overflow:hidden;min-width:0}
+.lab-box{height:100%;background:var(--pc);color:var(--pt);display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:calc(15px*var(--fs));padding:0 10px;overflow:hidden;white-space:nowrap}
+.lab.sec .lab-box{background:none;color:#333;justify-content:flex-start;padding:0 2px;border-bottom:2px solid #333;font-size:calc(16px*var(--fs))}
+.xc{display:flex;align-items:center;font-size:calc(15px*var(--fs));white-space:nowrap;overflow:hidden;min-width:0}
 .xc.c{justify-content:center}
 .xc.st{cursor:pointer;color:var(--pc)}
 .xc.dt{color:#555;font-variant-numeric:tabular-nums}
@@ -167,17 +177,17 @@ dialog.set::backdrop{background:rgba(20,20,18,.28)}
 .shade{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--primary) 6%,transparent)}
 .band{position:absolute;left:0;right:0;background:var(--head)}
 .today{position:absolute;top:0;bottom:0;border-left:2px solid #e4572e;z-index:4;pointer-events:none}
-.today span{position:absolute;bottom:-22px;left:-14px;font-size:11px;color:#e4572e;white-space:nowrap}
+.today span{position:absolute;bottom:calc(-22px*var(--fs));left:-14px;font-size:calc(11px*var(--fs));color:#e4572e;white-space:nowrap}
 .it{position:absolute;z-index:3;cursor:grab;touch-action:none}
 .it:active{cursor:grabbing}
 .it.bar{background:var(--c)}
 .it.bar .h{position:absolute;top:0;bottom:0;width:10px;cursor:ew-resize}
 .it.bar .h.l{left:-5px}.it.bar .h.r{right:-5px}
-.it.bar .bt{position:absolute;left:8px;right:8px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--ct);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.it.bar .bt{position:absolute;left:8px;right:8px;top:50%;transform:translateY(-50%);font-size:calc(12px*var(--fs));color:var(--ct);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 .it.pt{transform:translate(-50%,-50%);background:var(--c)}
-.it.dot{width:16px;height:16px;border-radius:50%}
-.it.diamond{width:22px;height:22px;transform:translate(-50%,-50%) rotate(45deg)}
-.it.flag{width:20px;height:18px;clip-path:polygon(0 0,100% 0,50% 100%)}
+.it.dot{width:calc(16px*var(--fs));height:calc(16px*var(--fs));border-radius:50%}
+.it.diamond{width:calc(22px*var(--fs));height:calc(22px*var(--fs));transform:translate(-50%,-50%) rotate(45deg)}
+.it.flag{width:calc(20px*var(--fs));height:calc(18px*var(--fs));clip-path:polygon(0 0,100% 0,50% 100%)}
 .it.dragging{opacity:.85}
 .empty{padding:48px;color:#999;text-align:center;border:1px dashed var(--line)}
 .tip{position:fixed;z-index:50;background:var(--ink);color:#fff;font-size:12px;padding:4px 8px;border-radius:6px;pointer-events:none;white-space:nowrap;display:none}
@@ -199,13 +209,19 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none!imp
 .side-hint{padding:14px 8px 0;font-size:12px;color:var(--faint);line-height:1.7}
 
 /* 圖上日期標示 */
-.dm{position:absolute;z-index:3;font-size:12px;color:#666;white-space:nowrap;transform:translateY(-50%);pointer-events:none;font-variant-numeric:tabular-nums;line-height:1}
+.dm{position:absolute;z-index:3;font-size:calc(12px*var(--fs));color:#666;white-space:nowrap;transform:translateY(-50%);pointer-events:none;font-variant-numeric:tabular-nums;line-height:1}
 .dm.l{transform:translate(-100%,-50%);padding-right:6px}
 .dm.r{padding-left:6px}
 .dm.in{color:var(--ct);padding-left:6px}
 @media print{.hide-today-print .today{display:none}}
 .chart.no-today .today{display:none}
-.chart.exporting:has(.today):not(.no-today){padding-bottom:24px}
+.xc.st svg{width:calc(24px*var(--fs));height:calc(24px*var(--fs))}
+/* 換行模式：任務名稱與文字欄可多行，列高自動長高 */
+.chart.wrap .lab-box{white-space:normal;line-height:1.3;padding:calc(6px*var(--fs)) 10px;word-break:break-word}
+.chart.wrap .lab.sec .lab-box{padding:calc(4px*var(--fs)) 2px}
+.chart.wrap .xc{white-space:normal;line-height:1.35;padding:calc(4px*var(--fs)) 0;word-break:break-word}
+.chart.wrap .xh{white-space:normal;line-height:1.3}
+.chart.exporting:has(.today):not(.no-today){padding-bottom:calc(24px*var(--fs))}
 .chart.exporting [contenteditable]:hover{box-shadow:none}
 .pv{display:flex;align-items:center;gap:16px;padding:4px 0 12px;border-bottom:1px solid var(--subtle)}
 .pv-page{flex:none;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #d6d6d2;border-radius:2px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
@@ -355,6 +371,7 @@ function defaultState() {
     colWidth: { day: 30, week: 104, month: 120 },
     labelWidth: 230, rowHeight: 36, rowGap: 12,
     theme: { primary: '#5b9e9b', head: '#f2f2f0' },
+    fontScale: 1, wrap: false, showCols: true,
     showToday: true, printToday: true, dateMarks: 'none', gridLines: 'group', shadeWeekend: true, barText: false,
     paperSize: 'A4', orient: 'auto', fillPage: true, exportFormat: 'pdf',
     projects: [{ id: p1, name: '活動執行', color: '#1c1c1a' }, { id: p2, name: '行政財務', color: '#5b9e9b' }],
@@ -396,6 +413,7 @@ function normalize(s) {
   delete o.paper; delete o.fitPage;
   if (!['pdf', 'jpg'].includes(o.exportFormat)) o.exportFormat = 'pdf';
   delete o.jpgLayout;
+  if (![1, 1.3, 1.6].includes(o.fontScale)) o.fontScale = 1;
   if (!['none', 'start', 'range'].includes(o.dateMarks)) o.dateMarks = 'none';
   delete o.labelColor;
   return o;
@@ -522,7 +540,10 @@ function renderChart() {
   const N = cols.length, cw = S.colWidth[S.unit] || 60, W = N * cw;
   chart.style.setProperty('--primary', S.theme.primary);
   chart.style.setProperty('--head', S.theme.head);
-  const gridCols = [S.labelWidth + 'px', W + 'px', ...S.columns.map(c => c.width + 'px')].join(' ');
+  const fs = S.fontScale || 1, XC = S.showCols ? S.columns : [];
+  chart.style.setProperty('--fs', fs);
+  chart.classList.toggle('wrap', !!S.wrap);
+  const gridCols = [S.labelWidth + 'px', W + 'px', ...XC.map(c => Math.round(c.width * (fs > 1 ? (1 + fs) / 2 : 1)) + 'px')].join(' ');
   const ce = 'contenteditable="plaintext-only" spellcheck="false"';
   let h = '';
   if (S.showTitle) h += `<div><div class="c-title" ${ce} data-edit="title">${esc(S.title)}</div></div>`;
@@ -531,22 +552,22 @@ function renderChart() {
     if (used.length) h += `<div class="legend">${used.map(p => `<span><i style="--c:${p.color}"></i>${esc(p.name)}</span>`).join('')}</div>`;
   }
   h += `<div class="c-grid c-head" style="grid-template-columns:${gridCols}">`;
-  h += `<div></div><div class="groups">${groups.map(g => `<div class="g" style="width:${g.count * cw}px"><span>${esc(g.label)}</span></div>`).join('')}</div>${S.columns.map(() => '<div></div>').join('')}`;
+  h += `<div></div><div class="groups">${groups.map(g => `<div class="g" style="width:${g.count * cw}px"><span>${esc(g.label)}</span></div>`).join('')}</div>${XC.map(() => '<div></div>').join('')}`;
   h += `<div class="axis"><div class="axis-box" ${ce} data-edit="axisLabel">${esc(S.axisLabel)}</div></div>`;
   h += `<div class="units">${cols.map(c => `<div class="u${c.weekend && S.shadeWeekend ? ' we' : ''}" style="width:${cw}px">${esc(c.label)}${c.sub ? `<small>${c.sub}</small>` : ''}</div>`).join('')}</div>`;
-  h += S.columns.map(c => `<div class="xh${c.type === 'text' ? '' : ' c'}" ${ce} data-edit="colname" data-col="${c.id}">${esc(c.name)}</div>`).join('');
+  h += XC.map(c => `<div class="xh${c.type === 'text' ? '' : ' c'}" ${ce} data-edit="colname" data-col="${c.id}">${esc(c.name)}</div>`).join('');
   h += `</div>`;
 
-  const n = S.rows.length, rh = S.rowHeight, gap = S.rowGap;
+  const n = S.rows.length, rh = Math.round(S.rowHeight * fs), gap = Math.round(S.rowGap * fs);
   if (!n) {
     h += `<div class="empty">還沒有任務，從左側「任務」新增</div>`;
   } else {
-    h += `<div class="c-grid" style="grid-template-columns:${gridCols};grid-template-rows:repeat(${n},${rh}px);row-gap:${gap}px">`;
+    h += `<div class="c-grid" style="grid-template-columns:${gridCols};grid-template-rows:repeat(${n},${S.wrap ? `minmax(${rh}px,auto)` : rh + 'px'});row-gap:${gap}px">`;
     S.rows.forEach((r, i) => {
       const gr = `grid-row:${i + 1}`, pc = rowColor(r);
       const pv = `--pc:${pc};--pt:${inkOn(pc)}`;
       h += `<div class="lab${r.type === 'section' ? ' sec' : ''}" style="grid-column:1;${gr};${pv}" data-open="${r.id}"><div class="lab-box" data-edit="rowname" data-row="${r.id}" title="拖曳排序・雙擊改名・右鍵改顏色與類型">${esc(r.name)}</div></div>`;
-      S.columns.forEach((c, j) => {
+      XC.forEach((c, j) => {
         const pos = `grid-column:${j + 3};${gr};${pv}`;
         if (r.type === 'section') { h += `<div style="${pos}"></div>`; return; }
         const v = r.fields[c.id];
@@ -557,7 +578,7 @@ function renderChart() {
     });
     let tl = '';
     if (S.unit === 'day' && S.shadeWeekend) cols.forEach((c, i) => { if (c.weekend) tl += `<div class="shade" style="left:${i * cw}px;width:${cw}px"></div>`; });
-    S.rows.forEach((r, i) => { if (r.type === 'section') tl += `<div class="band" style="top:${PAD + i * (rh + gap)}px;height:${rh}px"></div>`; });
+    S.rows.forEach((r, i) => { if (r.type === 'section') tl += `<div class="band" data-ri="${i}" style="top:${PAD + i * (rh + gap)}px;height:${rh}px"></div>`; });
     const gStart = new Set(groups.map(g => g.first));
     for (let i = 1; i < N; i++) {
       if (S.gridLines !== 'none' && gStart.has(i)) tl += `<div class="gl g2" style="left:${i * cw}px"></div>`;
@@ -569,21 +590,21 @@ function renderChart() {
       const tip = esc(`${r.name}｜${datesText(r)}`);
       if (r.type === 'bar') {
         const x1 = fracOf(a, 'start') * W, x2 = fracOf(b, 'end') * W, bh = Math.round(rh * 0.92);
-        tl += `<div class="it bar" data-row="${r.id}" data-tip="${tip}" style="--c:${color};--ct:${inkOn(color)};left:${x1}px;width:${Math.max(x2 - x1, 3)}px;top:${cy - bh / 2}px;height:${bh}px"><i class="h l"></i><i class="h r"></i>${S.barText ? `<span class="bt">${esc(r.name)}</span>` : ''}</div>`;
+        tl += `<div class="it bar" data-ri="${i}" data-row="${r.id}" data-tip="${tip}" style="--c:${color};--ct:${inkOn(color)};left:${x1}px;width:${Math.max(x2 - x1, 3)}px;top:${cy - bh / 2}px;height:${bh}px"><i class="h l"></i><i class="h r"></i>${S.barText ? `<span class="bt">${esc(r.name)}</span>` : ''}</div>`;
       } else {
-        tl += `<div class="it pt ${r.type}" data-row="${r.id}" data-tip="${tip}" style="--c:${color};left:${fracOf(a, 'mid') * W}px;top:${cy}px"></div>`;
+        tl += `<div class="it pt ${r.type}" data-ri="${i}" data-row="${r.id}" data-tip="${tip}" style="--c:${color};left:${fracOf(a, 'mid') * W}px;top:${cy}px"></div>`;
       }
       if (S.dateMarks !== 'none') {
         if (r.type === 'bar') {
           const x1 = fracOf(a, 'start') * W, x2 = fracOf(b, 'end') * W;
           // 起點太靠左邊界時，日期改放進橫條內
-          tl += x1 >= 44 ? `<span class="dm l" style="left:${x1}px;top:${cy}px">${md(a)}</span>`
-            : `<span class="dm in" style="left:${x1}px;top:${cy}px;--ct:${inkOn(color)}">${md(a)}</span>`;
-          if (S.dateMarks === 'range' && b !== a) tl += `<span class="dm r" style="left:${x2}px;top:${cy}px">${md(b)}</span>`;
+          tl += x1 >= 44 ? `<span class="dm l" data-ri="${i}" style="left:${x1}px;top:${cy}px">${md(a)}</span>`
+            : `<span class="dm in" data-ri="${i}" style="left:${x1}px;top:${cy}px;--ct:${inkOn(color)}">${md(a)}</span>`;
+          if (S.dateMarks === 'range' && b !== a) tl += `<span class="dm r" data-ri="${i}" style="left:${x2}px;top:${cy}px">${md(b)}</span>`;
         } else {
           const x = fracOf(a, 'mid') * W;
-          tl += x >= 50 ? `<span class="dm l" style="left:${x - 14}px;top:${cy}px">${md(a)}</span>`
-            : `<span class="dm r" style="left:${x + 14}px;top:${cy}px">${md(a)}</span>`;
+          tl += x >= 50 ? `<span class="dm l" data-ri="${i}" style="left:${x - 14}px;top:${cy}px">${md(a)}</span>`
+            : `<span class="dm r" data-ri="${i}" style="left:${x + 14}px;top:${cy}px">${md(a)}</span>`;
         }
       }
     });
@@ -595,6 +616,20 @@ function renderChart() {
   }
   chart.innerHTML = h;
   chart.classList.toggle('hide-today-print', !S.printToday);
+  if (S.wrap && n) alignRows();
+}
+// 換行模式下每列高度不同：依標籤實際位置重新對齊橫條、圖示與日期
+function alignRows() {
+  const tl = $('.tl', chart); if (!tl) return;
+  const z = parseFloat(chart.style.zoom) || 1, t0 = tl.getBoundingClientRect().top / z + tl.clientTop;
+  const rows = $$('.lab', chart).map(l => { const r = l.getBoundingClientRect(); return { top: r.top / z - t0, h: r.height / z }; });
+  $$('[data-ri]', tl).forEach(el => {
+    const R = rows[+el.dataset.ri]; if (!R) return;
+    const cy = R.top + R.h / 2;
+    if (el.classList.contains('band')) { el.style.top = R.top + 'px'; el.style.height = R.h + 'px'; }
+    else if (el.classList.contains('bar')) el.style.top = (cy - el.offsetHeight / 2) + 'px';
+    else el.style.top = cy + 'px';
+  });
 }
 
 /* ================= 頂列 ================= */
@@ -705,8 +740,11 @@ function renderSettings() {
     ${frow('月份列底色', `<input type="color" data-k="theme.head" value="${S.theme.head}">`)}
     ${frow('格線', `<select class="in" data-k="gridLines">${opt({ group: '只畫月份分隔', all: '每格都畫', none: '不畫' }, S.gridLines)}</select>`)}
     ${frow('圖上標示日期', `<select class="in" data-k="dateMarks">${opt({ none: '不標示', start: '起始日', range: '起訖日' }, S.dateMarks)}</select>`)}
+    ${frow('字級', `<div class="seg">${Object.entries(FONT).map(([v, l]) => `<button data-act="setFont" data-v="${v}" class="${String(S.fontScale) === v ? 'on' : ''}">${l}</button>`).join('')}</div>`)}
+    ${frow('任務名稱換行', sw('wrap', S.wrap))}
     ${frow('顯示標題', sw('showTitle', S.showTitle))}
     ${frow('顯示專案圖例', sw('showLegend', S.showLegend))}
+    ${frow('顯示右側欄位', sw('showCols', S.showCols))}
     ${frow('標示今天', sw('showToday', S.showToday))}
     ${frow('橫條內顯示任務名', sw('barText', S.barText))}
     <h4>右側欄位</h4>
@@ -719,6 +757,13 @@ function renderSettings() {
     <div style="padding-top:6px"><button class="btn sm" data-act="addCol">${ic('plus')}新增欄位</button></div>
   </div>`;
 }
+const PRESETS = {
+  full: { label: '完整', v: { fontScale: 1, wrap: false, showTitle: true, showLegend: true, showCols: true } },
+  proposal: { label: '企劃書', v: { fontScale: 1.3, wrap: true, showTitle: false, showLegend: true, showCols: true } },
+  chart: { label: '只有圖表', v: { fontScale: 1.3, wrap: true, showTitle: false, showLegend: false, showCols: false } },
+};
+const curPreset = () => Object.keys(PRESETS).find(k => Object.entries(PRESETS[k].v).every(([kk, vv]) => state[kk] === vv)) || '';
+const FONT = { 1: '標準', 1.3: '大', 1.6: '特大' };
 const exp = $('#exp');
 function renderExport() {
   const S = state;
@@ -726,6 +771,14 @@ function renderExport() {
   const seg = (act, cur, items) => `<div class="seg">${Object.entries(items).map(([v, l]) => `<button data-act="${act}" data-v="${v}" class="${cur === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   exp.innerHTML = `<div class="set-h"><h2>匯出</h2><button class="btn ib" data-tb="closeExp" title="關閉">${ic('x')}</button></div>
   <div class="set-b">
+    <h4>版面樣式</h4>
+    ${frow('樣式', seg('setPreset', curPreset(), Object.fromEntries(Object.entries(PRESETS).map(([k, p]) => [k, p.label]))), { full: '和編輯畫面一樣', proposal: '字放大、名稱可換行、不含大標題，適合放進企劃書', chart: '只留時間軸與任務，標題圖例另外寫' }[curPreset()] || '自訂')}
+    ${frow('字級', seg('setFont', String(S.fontScale), FONT))}
+    ${frow('任務名稱換行', sw('wrap', S.wrap), '名稱太長時自動換行，列高跟著長高')}
+    ${frow('顯示標題', sw('showTitle', S.showTitle))}
+    ${frow('顯示專案圖例', sw('showLegend', S.showLegend))}
+    ${frow('顯示右側欄位', sw('showCols', S.showCols), '負責人、狀態等')}
+    <h4>檔案</h4>
     ${frow('格式', seg('setFormat', S.exportFormat, { pdf: 'PDF', jpg: 'JPG' }))}
     ${pdf ? '' : '<div class="exp-note" style="text-align:left;margin:0 0 4px">依圖表原本大小輸出，解析度為畫面的 3 倍</div>'}
     ${usePage ? `${pagePreview()}
@@ -873,6 +926,8 @@ document.addEventListener('click', e => {
     case 'setPaper': S.paperSize = b.dataset.v; break;
     case 'setOrient': S.orient = b.dataset.v; break;
     case 'setFormat': S.exportFormat = b.dataset.v; break;
+    case 'setPreset': Object.assign(S, PRESETS[b.dataset.v].v); break;
+    case 'setFont': S.fontScale = Number(b.dataset.v); break;
     case 'newProjFor': { const p = newProject(); S.rows[ri].project = p.id; focusName = `[data-k="proj:${p.id}:name"]`; break; }
     case 'projDel': {
       if (S.projects.length < 2) return;
@@ -1236,7 +1291,7 @@ const TOUR = [
   { sel: ['#chart .tl'], t: '直接在圖上拖曳', d: '拖曳橫條整段移動日期，拖橫條左右兩端改開始或結束日。標題、負責人這些文字點一下就能改。', demo: 'drag' },
   { sel: ['#chart .lab'], t: '右鍵選單', d: '在任務標籤或橫條上按右鍵，可以換顏色（專案）和類型：期間、單日、舉辦日、截止日。雙擊標籤可改名。', demo: 'ctx' },
   { sel: ['[data-tb="settings"]'], t: '設定', d: '新增右側欄位（負責人、進度…）、調整列高列距、格線、圖例與時間軸主色。' },
-  { sel: ['.top .menu', '[data-tb="pdf"]'], t: '存檔與匯出', d: '「匯出」可下載 PDF 或 JPG。「檔案」可存成 JSON，帶到別台電腦或分享給別人。資料也會自動暫存在這個瀏覽器。' },
+  { sel: ['.top .menu', '[data-tb="pdf"]'], t: '存檔與匯出', d: '「匯出」可下載 PDF 或 JPG，並可切成「企劃書」（大字、可換行）或「只有圖表」版面。「檔案」可存成 JSON，帶到別台電腦或分享給別人。資料也會自動暫存在這個瀏覽器。' },
   { sel: ['[data-tb="tour"]'], t: '隨時再看一次', d: '之後點這個「?」就能重看這份導覽。開始排你的時程吧！' },
 ];
 const tourEl = document.createElement('div');
