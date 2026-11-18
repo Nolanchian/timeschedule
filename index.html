@@ -204,6 +204,14 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none!imp
 .dm.r{padding-left:6px}
 .dm.in{color:var(--ct);padding-left:6px}
 @media print{.hide-today-print .today{display:none}}
+.chart.no-today .today{display:none}
+.chart.exporting:has(.today):not(.no-today){padding-bottom:24px}
+.chart.exporting [contenteditable]:hover{box-shadow:none}
+.pv{display:flex;align-items:center;gap:16px;padding:4px 0 12px;border-bottom:1px solid var(--subtle)}
+.pv-page{flex:none;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #d6d6d2;border-radius:2px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.pv-chart{background:repeating-linear-gradient(180deg,#cfcfca 0 3px,transparent 3px 7px);border-radius:1px}
+.pv-t{font-size:14px;font-weight:700}
+.pv-t small{display:block;font-weight:400;font-size:12px;color:var(--muted);margin-top:4px}
 /* 匯出視窗 */
 dialog.set.exp{width:min(440px,calc(100vw - 32px))}
 .exp-act{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
@@ -288,7 +296,12 @@ const ic = n => `<svg class="i" viewBox="0 0 16 16"><path d="${ICONS[n]}"/></svg
 const TYPES = { bar: '期間', dot: '單日', diamond: '舉辦日', flag: '截止日', section: '分組標題' };
 const COLTYPES = { text: '文字', status: '進度圓餅', dates: '日期（自動）' };
 const PALETTE = ['#5b9e9b', '#2f5d8a', '#d9822b', '#4f8a4b', '#c44569', '#7a5ea8', '#1c1c1a', '#b0884f'];
-const PAPERS = { A4L: { label: 'A4 橫向', css: 'A4 landscape', w: 1047, h: 718 }, A3L: { label: 'A3 橫向', css: 'A3 landscape', w: 1512, h: 1047 }, A4P: { label: 'A4 直向', css: 'A4 portrait', w: 718, h: 1047 } };
+const PAPER = { A4: [210, 297], A3: [297, 420] }; // 短邊、長邊（mm）
+const MARGIN = 10;
+const LIBS = {
+  h2i: 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js',
+  pdf: 'https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js',
+};
 
 function defaultState() {
   const c1 = uid(), c2 = uid(), p1 = uid(), p2 = uid();
@@ -303,7 +316,7 @@ function defaultState() {
     labelWidth: 230, rowHeight: 36, rowGap: 12,
     theme: { primary: '#5b9e9b', head: '#f2f2f0' },
     showToday: true, printToday: true, dateMarks: 'none', gridLines: 'group', shadeWeekend: true, barText: false,
-    paper: 'A4L', fitPage: true,
+    paperSize: 'A4', orient: 'auto', fillPage: true,
     projects: [{ id: p1, name: '活動執行', color: '#1c1c1a' }, { id: p2, name: '行政財務', color: '#5b9e9b' }],
     columns: [{ id: c1, name: '負責人', type: 'text', width: 130 }, { id: c2, name: '狀態', type: 'status', width: 70 }],
     rows: [
@@ -337,7 +350,10 @@ function normalize(s) {
   });
   if (!isDate(o.start)) o.start = d.start;
   if (!isDate(o.end)) o.end = d.end;
-  if (!PAPERS[o.paper]) o.paper = 'A4L';
+  if (s.paper && !s.paperSize) { o.paperSize = s.paper.startsWith('A3') ? 'A3' : 'A4'; o.orient = s.paper.endsWith('P') ? 'portrait' : 'landscape'; }
+  if (!PAPER[o.paperSize]) o.paperSize = 'A4';
+  if (!['auto', 'landscape', 'portrait'].includes(o.orient)) o.orient = 'auto';
+  delete o.paper; delete o.fitPage;
   if (!['none', 'start', 'range'].includes(o.dateMarks)) o.dateMarks = 'none';
   delete o.labelColor;
   return o;
@@ -537,7 +553,6 @@ function renderChart() {
   }
   chart.innerHTML = h;
   chart.classList.toggle('hide-today-print', !S.printToday);
-  $('#page-style').textContent = `@page{size:${PAPERS[S.paper].css};margin:10mm}`;
 }
 
 /* ================= 頂列 ================= */
@@ -666,16 +681,59 @@ function renderExport() {
   const S = state;
   exp.innerHTML = `<div class="set-h"><h2>匯出 PDF</h2><button class="btn ib" data-tb="closeExp" title="關閉">${ic('x')}</button></div>
   <div class="set-b">
-    ${frow('紙張', `<select class="in" data-k="paper">${opt(Object.fromEntries(Object.entries(PAPERS).map(([k, v]) => [k, v.label])), S.paper)}</select>`)}
-    ${frow('自動縮成單頁', sw('fitPage', S.fitPage))}
+    ${pagePreview()}
+    ${frow('紙張', `<div class="seg">${['A4', 'A3'].map(v => `<button data-act="setPaper" data-v="${v}" class="${S.paperSize === v ? 'on' : ''}">${v}</button>`).join('')}</div>`)}
+    ${frow('方向', `<div class="seg">${Object.entries({ auto: '自動', landscape: '橫向', portrait: '直向' }).map(([v, l]) => `<button data-act="setOrient" data-v="${v}" class="${S.orient === v ? 'on' : ''}">${l}</button>`).join('')}</div>`, '自動：選能把圖放得最大的方向')}
+    ${frow('延展填滿頁面', sw('fillPage', S.fillPage), '自動加大列距或欄寬，讓圖表貼滿紙張')}
     ${frow('圖上標示日期', `<select class="in" data-k="dateMarks">${opt({ none: '不標示', start: '起始日', range: '起訖日' }, S.dateMarks)}</select>`, '在橫條起點或圖示旁加上日期')}
     ${frow('顯示今天線', S.showToday ? sw('printToday', S.printToday) : '<span class="off">已在設定中關閉</span>')}
-    <div class="exp-act"><button class="btn" data-tb="closeExp">取消</button><button class="btn primary" data-tb="doPrint">${ic('print')}匯出 PDF</button></div>
-    <div class="exp-note">下一步會開啟列印視窗，目的地選「另存為 PDF」</div>
+    <div class="exp-act"><button class="btn" data-tb="doPrint" title="用瀏覽器列印視窗另存 PDF（文字可選取）">改用列印視窗</button><span style="flex:1"></span><button class="btn" data-tb="closeExp">取消</button><button class="btn primary" data-tb="doPdf">${ic('print')}下載 PDF</button></div>
+
   </div>`;
 }
 
-function renderAll() { renderTop(); renderSide(); renderChart(); if (dlg.open) renderSettings(); }
+// 依圖表尺寸算出紙張方向與縮放（k：每 px 對應的 mm）
+function pageLayout(w, h) {
+  const [sh, lo] = PAPER[state.paperSize] || PAPER.A4;
+  const fit = (pw, ph) => Math.min((pw - 2 * MARGIN) / w, (ph - 2 * MARGIN) / h);
+  let o = state.orient;
+  if (o === 'auto') o = fit(lo, sh) >= fit(sh, lo) ? 'landscape' : 'portrait';
+  const [pw, ph] = o === 'landscape' ? [lo, sh] : [sh, lo];
+  const k = fit(pw, ph);
+  return { o, pw, ph, k, dw: w * k, dh: h * k };
+}
+// 「延展填滿」：圖太扁就加大列高與列距，太高就加寬時間格，讓比例貼近紙張
+function planStretch(w, h) {
+  const S = state, n = S.rows.length, N = COLS.length;
+  const p = { rh: S.rowHeight, gap: S.rowGap, cw: S.colWidth[S.unit], w, h };
+  if (!S.fillPage) return p;
+  const L = pageLayout(w, h), A = (L.pw - 2 * MARGIN) / (L.ph - 2 * MARGIN);
+  if (w / h > A && n) {
+    const D = w / A - h;
+    p.rh = Math.min(Math.max(S.rowHeight, 56), S.rowHeight + D / n * 0.5);
+    let rest = D - n * (p.rh - S.rowHeight);
+    if (n > 1) p.gap = Math.min(S.rowGap + rest / (n - 1), Math.max(S.rowGap, p.rh * 1.5));
+    p.h = h + n * (p.rh - S.rowHeight) + (n - 1) * (p.gap - S.rowGap);
+  } else if (w / h < A && N) {
+    p.cw = Math.min(S.colWidth[S.unit] * 2.5, S.colWidth[S.unit] + (h * A - w) / N);
+    p.w = w + N * (p.cw - S.colWidth[S.unit]);
+  }
+  return p;
+}
+function applyStretch() {
+  const S = state, o = { rh: S.rowHeight, gap: S.rowGap, cw: S.colWidth[S.unit] };
+  const p = planStretch(chart.scrollWidth, chart.scrollHeight);
+  S.rowHeight = Math.round(p.rh); S.rowGap = Math.round(p.gap); S.colWidth[S.unit] = Math.round(p.cw);
+  renderChart();
+  return () => { S.rowHeight = o.rh; S.rowGap = o.gap; S.colWidth[S.unit] = o.cw; renderChart(); };
+}
+function pagePreview() {
+  const p = planStretch(chart.scrollWidth || 1, chart.scrollHeight || 1);
+  const L = pageLayout(p.w, p.h), u = 150 / Math.max(L.pw, L.ph);
+  return `<div class="pv"><div class="pv-page" style="width:${L.pw * u}px;height:${L.ph * u}px"><div class="pv-chart" style="width:${L.dw * u}px;height:${L.dh * u}px"></div></div>
+    <div class="pv-t">${state.paperSize} ${L.o === 'landscape' ? '橫向' : '直向'}<small>四邊留 1 公分，其餘由圖表填滿</small></div></div>`;
+}
+function renderAll() { renderTop(); renderSide(); renderChart(); if (dlg.open) renderSettings(); if (exp.open) renderExport(); }
 
 /* ================= 編輯事件（頂列、側欄、設定共用） ================= */
 function setK(k, v) {
@@ -724,6 +782,7 @@ document.addEventListener('change', e => {
   const k = t.dataset.k;
   if (t.dataset.re || k.startsWith('proj:') || k === 'start' || k === 'end') renderSide();
   if (t.dataset.re && dlg.open) renderSettings();
+  if (exp.open) renderExport();
   if (k.startsWith('row:')) refreshRowSummary(k.split(':')[1]);
 });
 
@@ -770,6 +829,8 @@ document.addEventListener('click', e => {
     }
     case 'addProj': { const p = newProject(); focusName = `[data-k="proj:${p.id}:name"]`; break; }
     case 'setProj': S.rows[ri].project = b.dataset.v; break;
+    case 'setPaper': S.paperSize = b.dataset.v; break;
+    case 'setOrient': S.orient = b.dataset.v; break;
     case 'newProjFor': { const p = newProject(); S.rows[ri].project = p.id; focusName = `[data-k="proj:${p.id}:name"]`; break; }
     case 'projDel': {
       if (S.projects.length < 2) return;
@@ -1013,6 +1074,7 @@ document.addEventListener('click', e => {
     case 'pdf': renderExport(); exp.showModal(); break;
     case 'closeExp': exp.close(); break;
     case 'doPrint': exp.close(); checkpoint(); setTimeout(() => window.print(), 60); break;
+    case 'doPdf': exportPDF(b); break;
     case 'undo': undo(); break;
     case 'redo': redo(); break;
     case 'settings': renderSettings(); dlg.showModal(); break;
@@ -1037,14 +1099,68 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
   if ((e.metaKey || e.ctrlKey) && k === 'y') { e.preventDefault(); redo(); }
 });
+let printRestore = null;
 window.addEventListener('beforeprint', () => {
   if (document.activeElement?.isContentEditable) document.activeElement.blur();
   chart.style.zoom = '';
-  if (!state.fitPage) return;
-  const p = PAPERS[state.paper], z = Math.min(1, p.w / chart.scrollWidth, p.h / chart.scrollHeight);
-  if (z < 1) chart.style.zoom = z.toFixed(4);
+  if (!printRestore) printRestore = applyStretch();
+  chart.classList.add('exporting'); chart.classList.toggle('no-today', !state.printToday);
+  const L = pageLayout(chart.scrollWidth, chart.scrollHeight);
+  $('#page-style').textContent = `@page{size:${state.paperSize} ${L.o};margin:${MARGIN}mm}`;
+  chart.style.zoom = (L.k / 0.26458 * 0.995).toFixed(4); // 1px = 0.26458mm
 });
-window.addEventListener('afterprint', () => { chart.style.zoom = ''; });
+
+/* ================= 直接下載 PDF ================= */
+const loadScript = src => new Promise((ok, fail) => {
+  if (document.querySelector(`script[src="${src}"]`)) return ok();
+  const el = document.createElement('script'); el.src = src; el.onload = ok;
+  el.onerror = () => fail(new Error('無法載入匯出元件，請確認網路連線'));
+  document.head.appendChild(el);
+});
+const blobToDataURL = blob => new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(blob); });
+// 只抓圖上用到的字，做成內嵌字型，避免下載整套中文字型
+async function fontCSS(text) {
+  const chars = [...new Set(text.replace(/\s/g, '') + '0123456789/–今天')].join('');
+  let css = await (await fetch('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&text=' + encodeURIComponent(chars))).text();
+  for (const u of new Set([...css.matchAll(/url\((https:[^)]+)\)/g)].map(m => m[1]))) {
+    css = css.split(u).join(await blobToDataURL(await (await fetch(u)).blob()));
+  }
+  return css;
+}
+async function exportPDF(btn) {
+  const label = btn.innerHTML;
+  btn.disabled = true; btn.textContent = '產生中…';
+  if (document.activeElement?.isContentEditable) document.activeElement.blur();
+  hideTip(); closeCtx(); checkpoint();
+  const hideToday = !state.printToday;
+  chart.classList.add('exporting'); chart.classList.toggle('no-today', hideToday);
+  const restore = applyStretch();
+  try {
+    await Promise.all([loadScript(LIBS.h2i), loadScript(LIBS.pdf)]);
+    const w = chart.scrollWidth, h = chart.scrollHeight;
+    const L = pageLayout(w, h);
+    // 約 300dpi，並避免超過瀏覽器畫布上限
+    const pr = Math.max(1, Math.min(4, (L.dw / 25.4 * 300) / w, 15000 / w, 15000 / h));
+    let fontEmbedCSS;
+    try { fontEmbedCSS = await fontCSS(chart.innerText); } catch { fontEmbedCSS = undefined; }
+    const png = await window.htmlToImage.toPng(chart, { pixelRatio: pr, backgroundColor: '#ffffff', width: w, height: h, fontEmbedCSS, skipFonts: !fontEmbedCSS });
+    const doc = new window.jspdf.jsPDF({ orientation: L.o, unit: 'mm', format: state.paperSize.toLowerCase(), compress: true });
+    doc.setProperties({ title: state.title || '時程表' });
+    doc.addImage(png, 'PNG', (L.pw - L.dw) / 2, (L.ph - L.dh) / 2, L.dw, L.dh, undefined, 'FAST');
+    doc.save(`${(state.title || '時程表').replace(/[\\/:*?"<>|]/g, '_')}.pdf`);
+    exp.close();
+  } catch (err) {
+    if (confirm(`PDF 產生失敗：${err.message}\n\n要改用瀏覽器列印視窗嗎？`)) { exp.close(); setTimeout(() => window.print(), 60); }
+  } finally {
+    restore();
+    chart.classList.remove('exporting', 'no-today');
+    btn.disabled = false; btn.innerHTML = label;
+  }
+}
+window.addEventListener('afterprint', () => {
+  chart.style.zoom = ''; chart.classList.remove('exporting', 'no-today');
+  if (printRestore) { printRestore(); printRestore = null; }
+});
 
 renderAll();
 })();
