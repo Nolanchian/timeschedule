@@ -273,6 +273,12 @@ dialog.set.exp{width:min(440px,calc(100vw - 32px))}
 @keyframes tColor{0%,30%{background:#1c1c1a}34%,63%{background:#5b9e9b}67%,96%{background:#d9822b}100%{background:#1c1c1a}}
 @media (prefers-reduced-motion:reduce){.demo *{animation:none!important}}
 
+/* 檢視縮放 */
+.zoombar{position:fixed;right:16px;bottom:16px;z-index:20;display:flex;align-items:center;gap:2px;padding:4px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.06)}
+.zoombar .btn{font-size:14px;color:var(--text)}
+.zoombar .zv{min-width:56px;justify-content:center;font-variant-numeric:tabular-nums;font-size:12px}
+.zsep{width:1px;height:16px;background:var(--border);margin:0 4px}
+
 @media (max-width:860px){
   .app{grid-template-columns:1fr;grid-template-rows:auto auto 1fr;height:auto}
   .top{flex-wrap:wrap;padding:8px 12px;gap:8px}
@@ -284,7 +290,8 @@ dialog.set.exp{width:min(440px,calc(100vw - 32px))}
 @media print{
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   html,body{height:auto;background:#fff}
-  .top,.side,.tip,dialog,.ctx,.dropline,.tour{display:none!important}
+  .top,.side,.tip,dialog,.ctx,.dropline,.tour,.zoombar{display:none!important}
+  .chart-wrap{zoom:1!important}
   .app{display:block;height:auto}
   .main{overflow:visible}
   .stage{padding:0}
@@ -298,7 +305,14 @@ dialog.set.exp{width:min(440px,calc(100vw - 32px))}
 <div class="app">
   <header class="top" id="top"></header>
   <aside class="side" id="side"></aside>
-  <main class="main"><div class="stage"><div class="chart-wrap"><div class="chart" id="chart"></div></div></div></main>
+  <main class="main" id="main"><div class="stage"><div class="chart-wrap" id="wrap"><div class="chart" id="chart"></div></div></div>
+    <div class="zoombar" id="zoombar">
+      <button class="btn ib sm" data-zoom="out" title="縮小（⌘−）">−</button>
+      <button class="btn sm zv" data-zoom="reset" title="回到 100%（⌘0）">100%</button>
+      <button class="btn ib sm" data-zoom="in" title="放大（⌘＝）">＋</button>
+      <span class="zsep"></span>
+      <button class="btn sm" data-zoom="fit" title="整張圖放進視窗">符合視窗</button>
+    </div></main>
 </div>
 <dialog class="set" id="set"></dialog>
 <dialog class="set exp" id="exp"></dialog>
@@ -621,7 +635,7 @@ function renderChart() {
 // 換行模式下每列高度不同：依標籤實際位置重新對齊橫條、圖示與日期
 function alignRows() {
   const tl = $('.tl', chart); if (!tl) return;
-  const z = parseFloat(chart.style.zoom) || 1, t0 = tl.getBoundingClientRect().top / z + tl.clientTop;
+  const z = (tl.getBoundingClientRect().width / tl.offsetWidth) || 1, t0 = tl.getBoundingClientRect().top / z + tl.clientTop;
   const rows = $$('.lab', chart).map(l => { const r = l.getBoundingClientRect(); return { top: r.top / z - t0, h: r.height / z }; });
   $$('[data-ri]', tl).forEach(el => {
     const R = rows[+el.dataset.ri]; if (!R) return;
@@ -1032,7 +1046,7 @@ chart.addEventListener('pointerdown', e => {
   e.preventDefault();
   const r = findRow(it.dataset.row); if (!r) return;
   const tl = it.parentElement, W = tl.clientWidth;
-  const fx = x => (x - tl.getBoundingClientRect().left) / W;
+  const fx = x => { const r = tl.getBoundingClientRect(); return (x - r.left) / r.width; }; // 相容檢視縮放
   const mode = e.target.classList.contains('l') ? 'l' : e.target.classList.contains('r') ? 'r' : 'm';
   const [a, b] = rowDates(r);
   drag = { it, r, W, fx, mode, grab: fracToDay(fx(e.clientX)), a, b, na: a, nb: b, moved: false };
@@ -1274,6 +1288,56 @@ window.addEventListener('afterprint', () => {
   if (printRestore) { printRestore(); printRestore = null; }
 });
 
+/* ================= 檢視縮放（只影響畫面，不影響匯出） ================= */
+const mainEl = $('#main'), wrapEl = $('#wrap');
+const ZKEY = 'timeschedule.zoom', ZMIN = 0.25, ZMAX = 3;
+const ZSTEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+let viewZoom = 1;
+try { viewZoom = Math.min(ZMAX, Math.max(ZMIN, parseFloat(localStorage.getItem(ZKEY)) || 1)); } catch {}
+// 以畫面上某一點為中心縮放（預設為可視區中心）
+function setZoom(z, cx, cy) {
+  z = Math.min(ZMAX, Math.max(ZMIN, Math.round(z * 100) / 100));
+  const mr = mainEl.getBoundingClientRect();
+  if (cx == null) { cx = mr.left + mainEl.clientWidth / 2; cy = mr.top + mainEl.clientHeight / 2; }
+  const wr = wrapEl.getBoundingClientRect();
+  const px = (cx - wr.left) / viewZoom, py = (cy - wr.top) / viewZoom; // 縮放前，游標下的內容座標
+  viewZoom = z;
+  wrapEl.style.zoom = z === 1 ? '' : z;
+  const nr = wrapEl.getBoundingClientRect();
+  mainEl.scrollLeft += (nr.left + px * z) - cx;
+  mainEl.scrollTop += (nr.top + py * z) - cy;
+  $('.zv').textContent = Math.round(z * 100) + '%';
+  try { localStorage.setItem(ZKEY, z); } catch {}
+}
+function stepZoom(dir) {
+  const next = dir > 0 ? ZSTEPS.find(v => v > viewZoom + 0.001) : [...ZSTEPS].reverse().find(v => v < viewZoom - 0.001);
+  if (next) setZoom(next);
+}
+function fitZoom() {
+  const pad = 64, w = wrapEl.offsetWidth, h = wrapEl.offsetHeight;
+  setZoom(Math.min((mainEl.clientWidth - pad) / w, (mainEl.clientHeight - pad) / h, ZMAX));
+  mainEl.scrollTo({ left: 0, top: 0 });
+}
+$('#zoombar').addEventListener('click', e => {
+  const b = e.target.closest('[data-zoom]'); if (!b) return;
+  ({ in: () => stepZoom(1), out: () => stepZoom(-1), reset: () => setZoom(1), fit: fitZoom })[b.dataset.zoom]();
+});
+// Ctrl／⌘＋滾輪、觸控板雙指縮放
+mainEl.addEventListener('wheel', e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault();
+  setZoom(viewZoom * Math.exp(-e.deltaY * 0.0025), e.clientX, e.clientY);
+}, { passive: false });
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const t = e.target;
+  if (t.isContentEditable || /INPUT|SELECT|TEXTAREA/.test(t.tagName)) return;
+  if (e.key === '=' || e.key === '+') { e.preventDefault(); stepZoom(1); }
+  else if (e.key === '-' || e.key === '_') { e.preventDefault(); stepZoom(-1); }
+  else if (e.key === '0') { e.preventDefault(); setZoom(1); }
+});
+setZoom(viewZoom);
+
 /* ================= 使用導覽 ================= */
 const TOUR_KEY = 'timeschedule.tourDone';
 const CUR = '<svg class="cur" viewBox="0 0 16 16"><path d="M3 1.5l9.5 6.5-4.2.9 2.6 4.6-1.7.9-2.6-4.6L3 12.6z" fill="#fff" stroke="#1c1c1a" stroke-width="1.2" stroke-linejoin="round"/></svg>';
@@ -1290,6 +1354,7 @@ const TOUR = [
   { sel: ['.side .blk:nth-child(2)'], t: '任務清單', d: '點一下任務展開，編輯名稱、日期、類型與負責人。按住任務上下拖曳，可以調整順序。', demo: 'reorder' },
   { sel: ['#chart .tl'], t: '直接在圖上拖曳', d: '拖曳橫條整段移動日期，拖橫條左右兩端改開始或結束日。標題、負責人這些文字點一下就能改。', demo: 'drag' },
   { sel: ['#chart .lab'], t: '右鍵選單', d: '在任務標籤或橫條上按右鍵，可以換顏色（專案）和類型：期間、單日、舉辦日、截止日。雙擊標籤可改名。', demo: 'ctx' },
+  { sel: ['#zoombar'], t: '調整檢視大小', d: '右下角可以放大、縮小，或按「符合視窗」把整張圖放進畫面。也可以按住 Ctrl／⌘ 滾動滑鼠，或用觸控板雙指縮放。這只影響畫面，不影響匯出。' },
   { sel: ['[data-tb="settings"]'], t: '設定', d: '新增右側欄位（負責人、進度…）、調整列高列距、格線、圖例與時間軸主色。' },
   { sel: ['.top .menu', '[data-tb="pdf"]'], t: '存檔與匯出', d: '「匯出」可下載 PDF 或 JPG，並可切成「企劃書」（大字、可換行）或「只有圖表」版面。「檔案」可存成 JSON，帶到別台電腦或分享給別人。資料也會自動暫存在這個瀏覽器。' },
   { sel: ['[data-tb="tour"]'], t: '隨時再看一次', d: '之後點這個「?」就能重看這份導覽。開始排你的時程吧！' },
